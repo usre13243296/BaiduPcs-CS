@@ -1,4 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using BaiduPcs.Core.Download;
+using BaiduPcsAPP.Services;
 
 namespace BaiduPcsAPP.ViewModels;
 
@@ -13,9 +16,14 @@ public enum TransferTaskState
     Canceled,
 }
 
-/// <summary>传输任务行（下载/上传共用）。P4/P5 接入真实引擎。</summary>
+/// <summary>
+/// 传输任务行（下载/上传共用）。挂接 TransferManager 驱动真实引擎：
+/// 暂停/恢复/取消/删除命令 + 错误详情 + 状态驱动的按钮可用性。
+/// </summary>
 public partial class TransferTaskViewModel : ViewModelBase
 {
+    private readonly TransferManager? _manager;
+
     [ObservableProperty]
     public partial string Name { get; set; }
 
@@ -31,10 +39,35 @@ public partial class TransferTaskViewModel : ViewModelBase
     [ObservableProperty]
     public partial string DetailText { get; set; } = string.Empty;
 
-    public TransferTaskViewModel(string name)
+    /// <summary>引擎实例（运行中由 TransferManager 设置）。</summary>
+    internal Downloader? Engine { get; set; }
+
+    /// <summary>取消令牌（由 TransferManager 管理）。</summary>
+    internal CancellationTokenSource? Cts { get; set; }
+
+    /// <summary>远程路径与保存目录（失败重试用）。</summary>
+    internal string RemotePath { get; set; } = string.Empty;
+
+    internal string SaveDir { get; set; } = string.Empty;
+
+    public TransferTaskViewModel(string name, TransferManager? manager = null)
     {
         Name = name;
+        _manager = manager;
     }
+
+    public bool HasDetail => !string.IsNullOrEmpty(DetailText);
+
+    // ======================== 按钮可用性（状态驱动，对齐方案 6.2 矩阵） ========================
+
+    public bool CanPause => State == TransferTaskState.Running;
+
+    public bool CanResume => State is TransferTaskState.Paused or TransferTaskState.Failed;
+
+    public bool CanCancel => State is TransferTaskState.Queued or TransferTaskState.Running or TransferTaskState.Paused;
+
+    public bool CanDelete => State is TransferTaskState.Queued or TransferTaskState.Paused
+        or TransferTaskState.Completed or TransferTaskState.Failed or TransferTaskState.Canceled;
 
     public string StateText => State switch
     {
@@ -46,4 +79,29 @@ public partial class TransferTaskViewModel : ViewModelBase
         TransferTaskState.Canceled => "已取消",
         _ => string.Empty,
     };
+
+    partial void OnStateChanged(TransferTaskState value)
+    {
+        OnPropertyChanged(nameof(StateText));
+        OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(CanResume));
+        OnPropertyChanged(nameof(CanCancel));
+        OnPropertyChanged(nameof(CanDelete));
+    }
+
+    partial void OnDetailTextChanged(string value) => OnPropertyChanged(nameof(HasDetail));
+
+    // ======================== 操作命令（转发给 TransferManager） ========================
+
+    [RelayCommand]
+    private Task PauseAsync() => _manager?.PauseAsync(this) ?? Task.CompletedTask;
+
+    [RelayCommand]
+    private Task ResumeAsync() => _manager?.ResumeAsync(this) ?? Task.CompletedTask;
+
+    [RelayCommand]
+    private void Cancel() => _manager?.Cancel(this);
+
+    [RelayCommand]
+    private void Delete() => _manager?.Delete(this);
 }

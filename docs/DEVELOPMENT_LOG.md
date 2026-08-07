@@ -102,6 +102,44 @@ await clipboard.SetDataAsync(dataTransfer);
 
 ---
 
+## 三-bis、下载引擎改造（2026-08-08 落地，v0.8 前瞻）
+
+> 详细方案见 `docs/DOWNLOAD_ENGINE_DESIGN.md`。本文记录落地过程中的设计决策与踩坑。
+
+### 架构（三层对齐 Go BaiduPCS-Go）
+
+```
+BaiduPcs.Core/Download/      引擎层（与百度协议解耦）：Downloader 主控 / ChunkWorker 分片 /
+                             RangeGenerator / DownloadCheckpoint(.part.json) / RetryPolicy / SpeedMeter
+BaiduPcs.Core/Api/           协议层：GetDownloadLinksAsync（多备选直链）+ BuildDownloadUrlsAsync
+                             （method=download 自动降级兜底）
+BaiduPcsAPP/                 任务层：TransferManager（队列/并发2/暂停/取消/删除/去重）
+```
+
+### 关键设计决策
+
+1. **分片并发**：档位 <5MB→256KB … >15MB→4MB；并发统一 8（不做会员判断，见 5.8 实测结论——会员 8 并发 ≈ 20MB/s 与官方一致，非会员服务端总量限速 100KB/s 并发无增益）。
+2. **通道**：locatedownload 签名直链为主（encrypt=0、跳过 nb.cache 主机），403 判死后换下一个 dlink，全部耗尽自动降级 method=download 官方通道。
+3. **落盘**：`RandomAccess.WriteAsync` 绝对偏移写 `.part`，免合并、天然幂等；写锁串行化减轻磁盘压力。
+4. **断点**：`.part.json` 元数据（TotalSize/BlockSize/GenBegin/Ranges[]），每 ~1s 持久化；恢复时并发数 = 剩余分片数，进度不丢。
+5. **错误分类**（对齐 Go worker.go）：403/404/416 致命判死换链；429/509 限流退避重连；读超时（默认 30s）断流重连；单分片连续失败 8 次升级致命。
+6. **UA**：全链路统一 netdisk 安卓 UA（`ApiConstants.NetdiskUa`），与官方客户端身份一致。
+
+### 踩坑记录（重要）
+
+1. **`Task.WhenAny` 不传播取消**（最严重的坑）：`await Task.WhenAny(Task.Delay(500, ct), needWork)` 只等待 WhenAny 自身——它总是成功完成（返回先完成的任务），**取消后 Delay/needWork 以 canceled 状态立即完成 → 监控循环空转（实测 3 亿轮）→ 任务永不结束**。修复：循环头 `ct.ThrowIfCancellationRequested()` + 检查 `winner.IsCanceled`。**任何"等待组内任一"的场景都必须显式检查取消**。
+2. **`AsyncManualResetEvent` 初始状态**：暂停门控初始必须放行（`signaled: true`），否则所有 worker 挂死在第一行等待——表现为"下载无任何请求发出"。
+3. **GNU `timeout` 强杀 dotnet test 会留孤儿 testhost**（Windows 下 TerminateProcess 不递归清理进程树）：孤儿进程锁着测试 DLL，下次运行 vstest 报"测试主机进程崩溃"。正确做法：不用 GNU timeout、不接 `| tail` 管道（非流式缓冲制造"无输出"假象），必要时 `taskkill /F /T /PID` 清整棵进程树。
+4. **`HttpListener.Response.Abort()` 在 Windows 偶发 testhost 崩溃**：断流模拟改用"声明 Content-Length 大于实际写入后 Close"。
+5. **测试断流行为不能按"第一个请求"匹配**：并发下分片请求可能先于探测到达服务器，行为必须按请求特征（Range=bytes=0-32767）匹配。
+
+### 测试
+
+- 引擎单元 + 集成共 **52 个新用例**（Range 切分/并发偏移写/断点取消恢复/429 重试/403 换链/断流重连/暂停恢复/进度单调/200 单线程降级），本地 TestHttpServer 模拟，不访问真实网络。
+- 全量 **118 个用例全绿**（旧 59 + 协议层 7 + 引擎 52）。
+
+---
+
 ## 四、V0.5 功能清单
 
 - [x] BDUSS 登录 + Cookie 初始化/持久化

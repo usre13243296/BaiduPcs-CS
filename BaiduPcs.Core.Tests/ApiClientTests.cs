@@ -229,6 +229,140 @@ public class ApiClientPipelineTests
     }
 }
 
+public class DownloadLinkTests
+{
+    private sealed class MockHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
+
+        public MockHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        {
+            _responder = responder;
+        }
+
+        public List<HttpRequestMessage> Requests { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(_responder(request));
+        }
+    }
+
+    private static (BaiduPcsApiClient Client, MockHttpMessageHandler Handler) CreateClient(Func<HttpRequestMessage, HttpResponseMessage> responder)
+    {
+        var handler = new MockHttpMessageHandler(responder);
+        var http = new BaiduHttpClient(options: null, handler: handler);
+        var session = BaiduSession.FromBduss("fake-bduss");
+        var client = new BaiduPcsApiClient(http, session);
+        return (client, handler);
+    }
+
+    private static HttpResponseMessage JsonResponse(string json) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        };
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_ReturnsEncryptZeroLinks()
+    {
+        var (client, handler) = CreateClient(_ => JsonResponse(
+            """{"error_code":0,"urls":[{"url":"https://d1.baidu.com/a.bin","encrypt":0},{"url":"https://d2.baidu.com/b.bin","encrypt":0},{"url":"https://d3.baidu.com/c.bin","encrypt":1}]}"""));
+        client.Session.Uid = 12345;
+
+        var links = await client.GetDownloadLinksAsync("/1.bin");
+
+        Assert.Equal(2, links.Count);
+        Assert.Equal("https://d1.baidu.com/a.bin", links[0]);
+        Assert.Equal("https://d2.baidu.com/b.bin", links[1]);
+
+        // 请求应携带 locatedownload 签名参数与 netdisk UA
+        var request = handler.Requests.Single();
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Contains("method=locatedownload", request.RequestUri!.ToString());
+        Assert.Contains("path=%2f1.bin", request.RequestUri.ToString());
+        Assert.Contains("rand=", request.RequestUri.ToString());
+        Assert.Contains("devuid=", request.RequestUri.ToString());
+        Assert.Contains("netdisk", request.Headers.GetValues("User-Agent").First());
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_SkipsNbCacheHost()
+    {
+        var (client, _) = CreateClient(_ => JsonResponse(
+            """{"error_code":0,"urls":[{"url":"https://nb.cache.baidu.com/x.bin","encrypt":0},{"url":"https://d1.baidu.com/a.bin","encrypt":0}]}"""));
+        client.Session.Uid = 12345;
+
+        var links = await client.GetDownloadLinksAsync("/1.bin");
+
+        Assert.Single(links);
+        Assert.Equal("https://d1.baidu.com/a.bin", links[0]);
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_DlinkListFallback()
+    {
+        var (client, _) = CreateClient(_ => JsonResponse(
+            """{"error_code":0,"dlink":[{"dlink":"https://d1.baidu.com/a.bin","fs_id":"1"}]}"""));
+        client.Session.Uid = 12345;
+
+        var links = await client.GetDownloadLinksAsync("/1.bin");
+
+        Assert.Single(links);
+        Assert.Equal("https://d1.baidu.com/a.bin", links[0]);
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_NoLinks_Throws()
+    {
+        var (client, _) = CreateClient(_ => JsonResponse("""{"error_code":0,"urls":[]}"""));
+        client.Session.Uid = 12345;
+
+        var ex = await Assert.ThrowsAsync<BaiduApiException>(() => client.GetDownloadLinksAsync("/1.bin"));
+        Assert.Contains("未找到下载链接", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetDownloadLinksAsync_MissingUid_Throws()
+    {
+        var (client, _) = CreateClient(_ => JsonResponse("""{"error_code":0}"""));
+        // Uid 未设置（默认 0）
+
+        var ex = await Assert.ThrowsAsync<BaiduApiException>(() => client.GetDownloadLinksAsync("/1.bin"));
+        Assert.Contains("UID", ex.Message);
+    }
+
+    [Fact]
+    public async Task BuildDownloadUrlsAsync_AppendsOfficialFallback()
+    {
+        var (client, handler) = CreateClient(_ => JsonResponse(
+            """{"error_code":0,"urls":[{"url":"https://d1.baidu.com/a.bin","encrypt":0}]}"""));
+        client.Session.Uid = 12345;
+
+        var urls = await client.BuildDownloadUrlsAsync("/1.bin");
+
+        // locatedownload 直链在前，method=download 官方通道兜底在后
+        Assert.Equal(2, urls.Count);
+        Assert.Equal("https://d1.baidu.com/a.bin", urls[0]);
+        Assert.Contains("method=download", urls[1]);
+        Assert.Contains("path=%2f1.bin", urls[1]);
+    }
+
+    [Fact]
+    public async Task BuildDownloadUrlsAsync_LocateFails_UsesOfficialOnly()
+    {
+        var (client, _) = CreateClient(_ => JsonResponse("""{"errno":-6}"""));
+        client.Session.Uid = 12345;
+
+        var urls = await client.BuildDownloadUrlsAsync("/1.bin");
+
+        // locatedownload 失败（errno=-6 需要重新登录）时仅保留官方通道兜底
+        Assert.Single(urls);
+        Assert.Contains("method=download", urls[0]);
+    }
+}
+
 public class ErrorMessageCatalogTests
 {
     [Fact]

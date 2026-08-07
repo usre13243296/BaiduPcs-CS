@@ -2,23 +2,24 @@
 
 基于 .NET 10 + Avalonia UI 的百度网盘桌面客户端，以 C# 重写 BaiduPCS-Go 的核心能力，提供现代桌面界面与稳定的下载通道。
 
-> **版本：v0.5（MVP）** · 纯 C# 实现 · 支持 Windows（Avalonia 跨平台框架，理论可扩展其他平台）
+> **版本：v0.5.9** · 纯 C# 实现 · 发布包支持 Windows / Linux / macOS（Avalonia 跨平台框架）
 
 ## 功能特性
 
-### ✅ 已实现（v0.5）
+### ✅ 已实现
 - **BDUSS 登录**：粘贴 BDUSS 直接登录，支持高级模式附加完整 Cookie 串；自动收集/持久化服务器下发 Cookie，登录验证稳定
 - **文件浏览**：目录列表、面包屑导航、进入/后退/刷新、新建/重命名/删除、配额显示
-- **官方通道下载**：走 PCS `method=download` 接口（服务端签发直链 + 自动跟随重定向），**会员加速在此生效**；支持断点续传（`.part`）与实时进度/速度显示
+- **多线程分片下载**：locatedownload 签名直链为主通道（多备选链接）+ method=download 官方通道自动降级；分片并发（统一 8 并发，会员实测 8 并发 ≈ 20MB/s 与官方客户端一致），`WriteAt` 绝对偏移写免合并
+- **断点续传**：`.part.json` 记录各分片剩余范围，中断/取消后自动恢复；失败自动重试（429/509 限流退避重连、断流读超时重连、403 自动换直链）
+- **传输任务管理**：队列调度（同时下载 2 个）、暂停/恢复/取消/删除、同路径去重、失败重试、错误详情展示
 - **复制下载链接**：独立于下载的"复制链接"按钮，一键获取 locatedownload 签名直链到剪贴板（可发人/手动下载器使用）
 - **淡灰蓝浅色系 UI**：柔和配色，低光不刺眼
 - **多账号**：账号本地持久化，重启自动恢复登录态
 
 ### 计划中
-- 多线程分片下载、失败自动重试、传输任务管理（暂停/取消）
 - 上传引擎（单文件 → 分片 → 秒传）
 - 搜索、回收站、复制/移动、分享
-- 设置页（代理/限速/UA）、打包发布
+- 下载限速、设置页（代理/限速/UA）、打包发布
 
 ## 技术栈
 
@@ -43,7 +44,7 @@ BaiduPcs.slnx
 │  │  └─ ErrorMessageCatalog.cs # 错误码 → 可读消息
 │  ├─ Auth/                  # 登录 / 会话 / Cookie
 │  ├─ Crypto/                # NetdiskSign（下载签名）/ Md5Obfuscator
-│  ├─ Download/              # 下载服务（流式 + 断点续传 + 进度）
+│  ├─ Download/              # 下载引擎（多线程分片 + 断点续传 + 重试 + 暂停/取消）
 │  └─ Infrastructure/        # HTTP 客户端 / 路径常量
 ├─ BaiduPcs.Core.Tests/      # 单元测试（59 个用例，含密码学 Go 向量验证）
 └─ BaiduPcsAPP/              # Avalonia 桌面应用
@@ -71,6 +72,22 @@ dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj
 dotnet run --project BaiduPcsAPP/BaiduPcsAPP.csproj
 ```
 
+### 打包发布（多平台单文件）
+
+```bash
+dotnet publish BaiduPcsAPP/BaiduPcsAPP.csproj -c Release -r <RID> \
+  --self-contained true -p:PublishSingleFile=true \
+  -p:IncludeNativeLibrariesForSelfExtract=true -o publish/<RID>
+```
+
+支持 RID：`win-x64` / `win-arm64` / `linux-x64` / `osx-x64` / `osx-arm64`。
+
+发布包注意事项：
+- **Windows**：直接运行 `BaiduPcsAPP.exe`（单文件，免安装）
+- **macOS**：未签名应用首次运行需右键 → 打开（Gatekeeper）；如遇"已损坏"提示执行 `xattr -cr BaiduPcsAPP`
+- **Linux**：需系统安装 X11/Wayland 与 OpenGL 依赖（Avalonia 运行时要求，如 `libX11 libxcb libGL` 等）
+- **Linux/macOS**：Windows 侧打包的 zip 不保留 Unix 执行位，解压后需 `chmod +x BaiduPcsAPP`
+
 ## 核心思路
 
 本项目以开源项目 **BaiduPCS-Go** 为协议参考（MIT 社区项目），用 C# 完整重写。关键设计：
@@ -78,9 +95,10 @@ dotnet run --project BaiduPcsAPP/BaiduPcsAPP.csproj
 - **登录链路**：先访问网盘首页完成 Cookie 初始化（收集 BAIDUID 等），再调 `getinfo` 验证并取 UID——避免裸 BDUSS 请求被风控拒绝
 - **UA 策略**：`pan.baidu.com/api/*` 接口必须用 netdisk 客户端 UA（Chrome UA 会被拒）；`pcs.baidu.com/rest/2.0/pcs/*` 用浏览器 UA 即可
 - **双下载通道并列**（非自动降级）：
-  - 「下载」→ 官方 `method=download`，服务端按账号会员等级签发直链（会员加速）
+  - 「下载」→ locatedownload 签名直链为主通道（多备选链接），失败自动降级官方 `method=download`（服务端按账号会员等级签发直链）
   - 「复制链接」→ locatedownload 签名直链（独立能力，可分享/手动下载）
-- **断点续传**：`.part` 临时文件 + HTTP Range 头，中断后自动续传
+- **多线程分片下载**：分片并发（统一 8 并发）+ `WriteAt` 偏移写免合并；429/509 限流退避重连、断流读超时重连、403 换直链、备选直链逐条尝试
+- **断点续传**：`.part` 数据文件 + `.part.json` 断点元数据（各分片剩余范围），中断/取消后自动恢复
 - **稳健性**：响应体按字节读取显式 UTF-8 解码（规避百度返回非标准 `charset=utf8` 导致的崩溃）；全局异常日志兜底
 
 ## 免责声明
@@ -89,8 +107,9 @@ dotnet run --project BaiduPcsAPP/BaiduPcsAPP.csproj
 
 ## Roadmap（规划）
 
-- **v0.6**：上传引擎（单文件 → 分片 → 秒传）、传输任务管理（暂停/取消/队列）
+- ~~v0.6 传输任务管理（暂停/取消/队列）~~ ✅ 已落地（下载侧）
+- **v0.6 剩余**：上传引擎（单文件 → 分片 → 秒传）
 - **v0.7**：搜索、回收站、复制/移动、多选批处理
-- **v0.8**：下载线程池 + 分片加速、失败重试、限速
-- **v0.9**：设置页落地（代理/UA/并发）、分享
+- ~~v0.8 下载线程池 + 分片加速、失败重试~~ ✅ 已落地；限速未做（后置）
+- **v0.9**：设置页落地（代理/UA/并发/限速）、分享
 - **v1.0**：打包发布（Windows 安装包 + 图标 + 托盘 + 自动更新）

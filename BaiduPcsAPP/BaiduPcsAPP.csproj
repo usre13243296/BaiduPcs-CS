@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <Version>0.5.9</Version>
 
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>

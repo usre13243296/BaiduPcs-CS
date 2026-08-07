@@ -46,10 +46,36 @@ public sealed partial class BaiduPcsApiClient
     }
 
     /// <summary>
-    /// 获取下载直链。对应 Go 端 PrepareLocateDownload / LocateDownload。
-    /// POST pcs.baidu.com/rest/2.0/pcs/file?method=locatedownload&path=...&签名参数
+    /// 构造下载候选直链列表：locatedownload 签名直链（多备选）+ method=download 官方通道兜底。
+    /// 引擎按序尝试：dlink 全部失败（403 等）后自动降级官方通道。
+    /// 对应 Go 端 LocateDownload + DlinkPrefer + DownloadFile 降级。
     /// </summary>
-    public async Task<DownloadLinkInfo> GetDownloadLinkAsync(string path, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> BuildDownloadUrlsAsync(string path, CancellationToken ct = default)
+    {
+        var urls = new List<string>();
+        try
+        {
+            urls.AddRange(await GetDownloadLinksAsync(path, ct).ConfigureAwait(false));
+        }
+        catch (BaiduApiException)
+        {
+            // locatedownload 失败（UID 缺失 / 风控 / 接口变更）：仅走官方通道兜底
+        }
+
+        // 官方通道（method=download，服务端按账号等级签发直链并 302 重定向）作为最终兜底
+        urls.Add(GeneratePcsUrl("file", "download", new Dictionary<string, string>
+        {
+            ["path"] = path,
+        }).ToString());
+        return urls;
+    }
+
+    /// <summary>
+    /// 获取 locatedownload 签名直链列表（多备选链接，encrypt=0 且跳过 nb.cache 主机）。
+    /// 对应 Go 端 PrepareLocateDownload：urls[] 只取 encrypt==0 的链接；
+    /// nb.cache 开头的备选 CDN 主机不稳定，跳过（对齐 Go DlinkPrefer）。
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetDownloadLinksAsync(string path, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -98,24 +124,62 @@ public sealed partial class BaiduPcsApiClient
             builder.Uri,
             ct: ct).ConfigureAwait(false);
 
-        // 优先取 encrypt=0 的非加密链接
+        var result = new List<string>();
         if (envelope.Urls is not null)
         {
             foreach (var item in envelope.Urls)
             {
-                if (item.Encrypt == 0 && !string.IsNullOrEmpty(item.Url))
+                if (item.Encrypt != 0 || string.IsNullOrEmpty(item.Url))
                 {
-                    return new DownloadLinkInfo { Dlink = item.Url };
+                    continue;
                 }
+
+                if (IsNbCacheHost(item.Url))
+                {
+                    continue;
+                }
+
+                result.Add(item.Url);
             }
         }
 
         // 兜底：dlink 列表
-        if (envelope.DlinkList is { Count: > 0 } dlinks && !string.IsNullOrEmpty(dlinks[0].Dlink))
+        if (envelope.DlinkList is not null)
         {
-            return dlinks[0];
+            foreach (var d in envelope.DlinkList)
+            {
+                if (!string.IsNullOrEmpty(d.Dlink))
+                {
+                    result.Add(d.Dlink);
+                }
+            }
         }
 
-        throw BaiduApiException.Other(OperationLocateDownload, "未找到下载链接");
+        if (result.Count == 0)
+        {
+            throw BaiduApiException.Other(OperationLocateDownload, "未找到下载链接");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 获取下载直链（取第一个可用备选链接）。供"复制链接"等单链接场景使用。
+    /// </summary>
+    public async Task<DownloadLinkInfo> GetDownloadLinkAsync(string path, CancellationToken ct = default)
+    {
+        var links = await GetDownloadLinksAsync(path, ct).ConfigureAwait(false);
+        return new DownloadLinkInfo { Dlink = links[0] };
+    }
+
+    /// <summary>判断是否为 nb.cache 开头的备选 CDN 主机（不稳定，跳过）。</summary>
+    private static bool IsNbCacheHost(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Host.StartsWith("nb.cache", StringComparison.OrdinalIgnoreCase);
     }
 }

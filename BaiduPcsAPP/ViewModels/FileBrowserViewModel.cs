@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using BaiduPcs.Core.Api;
-using BaiduPcs.Core.Download;
 using BaiduPcs.Core.Util;
 using BaiduPcsAPP.Services;
 
@@ -16,6 +15,7 @@ public partial class FileBrowserViewModel : ViewModelBase
     private readonly BaiduPcsApiClient _api;
     private readonly IDialogService _dialogs;
     private readonly TransfersViewModel _transfers;
+    private readonly TransferManager _transferManager;
     private readonly string _saveDir;
 
     [ObservableProperty]
@@ -55,11 +55,13 @@ public partial class FileBrowserViewModel : ViewModelBase
         BaiduPcsApiClient api,
         IDialogService dialogs,
         TransfersViewModel transfers,
+        TransferManager transferManager,
         string saveDir)
     {
         _api = api;
         _dialogs = dialogs;
         _transfers = transfers;
+        _transferManager = transferManager;
         _saveDir = saveDir;
     }
 
@@ -259,7 +261,7 @@ public partial class FileBrowserViewModel : ViewModelBase
         }
     }
 
-    /// <summary>下载选中的文件（目录暂不支持）。</summary>
+    /// <summary>下载选中的文件（目录暂不支持）。经 TransferManager 入队调度，支持暂停/取消/断点续传。</summary>
     [RelayCommand]
     private async Task DownloadSelectedAsync()
     {
@@ -282,41 +284,10 @@ public partial class FileBrowserViewModel : ViewModelBase
             return;
         }
 
-        var task = new TransferTaskViewModel(SelectedItem.Name) { State = TransferTaskState.Queued };
-        _transfers.AddTask(task);
-
-        _ = Task.Run(async () =>
+        if (!_transferManager.EnqueueDownload(SelectedItem.Path, saveDir))
         {
-            try
-            {
-                task.State = TransferTaskState.Running;
-                var service = new DownloadService(_api);
-                var localPath = Path.Combine(saveDir, SelectedItem.Name);
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                long lastBytes = 0;
-
-                var progress = new Progress<DownloadProgress>(p =>
-                {
-                    task.Progress = p.Percent;
-                    var delta = p.DownloadedBytes - lastBytes;
-                    lastBytes = p.DownloadedBytes;
-                    if (sw.Elapsed.TotalSeconds >= 1)
-                    {
-                        task.SpeedText = $"{SizeFormatter.ConvertFileSize((long)(delta / Math.Max(sw.Elapsed.TotalSeconds, 0.001)), 2)}/s";
-                        sw.Restart();
-                    }
-                });
-
-                await service.DownloadAsync(SelectedItem.Path, localPath, progress);
-                task.State = TransferTaskState.Completed;
-                task.DetailText = localPath;
-            }
-            catch (Exception ex)
-            {
-                task.State = TransferTaskState.Failed;
-                task.DetailText = ex.Message;
-            }
-        });
+            await _dialogs.ShowMessageAsync("提示", "该文件已在下载队列中。");
+        }
     }
 }
 

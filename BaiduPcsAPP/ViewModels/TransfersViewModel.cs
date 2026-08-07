@@ -50,6 +50,18 @@ public partial class TransfersViewModel : ViewModelBase
         });
     }
 
+    /// <summary>移除一个任务行（线程安全，可在后台线程调用）。</summary>
+    public void RemoveTask(TransferTaskViewModel task)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            Tasks.Remove(task);
+            OnPropertyChanged(nameof(HasTasks));
+            OnPropertyChanged(nameof(HasNoTasks));
+            RefreshCounters();
+        });
+    }
+
     private void RefreshCounters()
     {
         RunningCount = Tasks.Count(t => t.State == TransferTaskState.Running || t.State == TransferTaskState.Queued);

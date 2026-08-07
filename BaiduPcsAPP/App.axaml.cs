@@ -110,7 +110,8 @@ public partial class App : Application
         var api = services.CreateApiClient(account);
 
         var transfers = new TransfersViewModel();
-        var fileBrowser = new FileBrowserViewModel(api, dialogs, transfers, BaiduPcs.Core.Infrastructure.AppPaths.DefaultDownloadDir);
+        var transferManager = new TransferManager(api, transfers);
+        var fileBrowser = new FileBrowserViewModel(api, dialogs, transfers, transferManager, BaiduPcs.Core.Infrastructure.AppPaths.DefaultDownloadDir);
         var settings = new SettingsViewModel();
 
         var viewModel = new MainViewModel(account, fileBrowser, transfers, settings, () =>
