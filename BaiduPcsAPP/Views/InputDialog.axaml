@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="BaiduPcsAPP.Views.InputDialog"
+        Width="420" SizeToContent="Height"
+        CanResize="False" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="24,20" Spacing="12">
+        <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" />
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Opacity="0.75" />
+        <TextBox x:Name="InputBox" MinWidth="280" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button x:Name="CancelButton" Content="取消" />
+            <Button x:Name="OkButton" Content="确定" Classes="accent" />
+        </StackPanel>
+    </StackPanel>
+</Window>

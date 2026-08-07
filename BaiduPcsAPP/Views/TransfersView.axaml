@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BaiduPcsAPP.ViewModels"
+             x:Class="BaiduPcsAPP.Views.TransfersView"
+             x:DataType="vm:TransfersViewModel">
+
+    <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,8,12,4">
+            <TextBlock Text="传输" FontSize="13" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Opacity="0.6" FontSize="12" VerticalAlignment="Center" Margin="8,0"
+                       Text="{Binding RunningCount, StringFormat={}{0} 个进行中}">
+            </TextBlock>
+            <Button Grid.Column="2" Content="{Binding ExpandText}" />
+        </Grid>
+
+        <ListBox Grid.Row="1" ItemsSource="{Binding Tasks}" MaxHeight="160"
+                 BorderThickness="0" Background="Transparent"
+                 IsVisible="{Binding HasTasks}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TransferTaskViewModel">
+                    <Grid ColumnDefinitions="*,Auto" MinHeight="34" Margin="4,2">
+                        <StackPanel Grid.Column="0" Spacing="2">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding StateText}" FontSize="12" Opacity="0.6" />
+                            </Grid>
+                            <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding SpeedText}" FontSize="12" Opacity="0.6"
+                                   VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock Grid.Row="1" Text="暂无传输任务" Opacity="0.4" HorizontalAlignment="Center" Margin="0,12"
+                   IsVisible="{Binding HasNoTasks}" />
+    </Grid>
+</UserControl>

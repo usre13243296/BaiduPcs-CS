@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BaiduPcsAPP.ViewModels"
+             x:Class="BaiduPcsAPP.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <StackPanel Margin="24" Spacing="12" MaxWidth="640" HorizontalAlignment="Left">
+        <TextBlock Text="设置" FontSize="20" FontWeight="SemiBold" />
+        <Border Background="{DynamicResource ContentBackground}" Padding="20" CornerRadius="10"
+                BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{Binding AppDescription}" TextWrapping="Wrap" Opacity="0.75" />
+                <TextBlock Text="{Binding DownloadDirText}" Opacity="0.6" FontSize="12" />
+                <TextBlock Text="{Binding Version, StringFormat=版本：{0}}" Opacity="0.5" FontSize="12" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

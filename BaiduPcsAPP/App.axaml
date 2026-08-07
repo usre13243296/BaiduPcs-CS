@@ -1,0 +1,49 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BaiduPcsAPP.App"
+             xmlns:local="using:BaiduPcsAPP"
+             RequestedThemeVariant="Light">
+
+    <Application.Resources>
+        <!-- 主题色板（淡灰蓝浅色系，低饱和度、对比较柔和） -->
+        <SolidColorBrush x:Key="WindowBackground" Color="#E8EAF0" />
+        <SolidColorBrush x:Key="ContentBackground" Color="#F5F6F9" />
+        <SolidColorBrush x:Key="SidebarBackground" Color="#DDE1E9" />
+        <SolidColorBrush x:Key="SidebarTextColor" Color="#2E3450" />
+        <SolidColorBrush x:Key="TextPrimary" Color="#232A38" />
+        <SolidColorBrush x:Key="TextSecondary" Color="#5A6274" />
+        <SolidColorBrush x:Key="CardBorder" Color="#CED4DE" />
+        <SolidColorBrush x:Key="AccentColor" Color="#2E5BDB" />
+        <SolidColorBrush x:Key="ErrorColor" Color="#D64545" />
+    </Application.Resources>
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- 全局文字颜色：默认黑字统一为柔和的深灰蓝 -->
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        </Style>
+
+        <!-- 导航按钮样式（浅底深字，悬停淡灰高亮） -->
+        <Style Selector="Button.nav">
+            <Setter Property="Foreground" Value="{DynamicResource SidebarTextColor}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.nav:pointerover">
+            <Setter Property="Background" Value="#C6CDD9" />
+            <Setter Property="Foreground" Value="#1F2536" />
+        </Style>
+        <Style Selector="Button.nav:pressed">
+            <Setter Property="Background" Value="#BAC2D0" />
+        </Style>
+    </Application.Styles>
+</Application>

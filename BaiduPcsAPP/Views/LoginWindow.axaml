@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BaiduPcsAPP.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="560"
+        x:Class="BaiduPcsAPP.Views.LoginWindow"
+        x:DataType="vm:LoginViewModel"
+        Title="BaiduPcs - 登录"
+        Width="760" Height="560"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid Background="{DynamicResource WindowBackground}">
+        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                Width="420" Padding="32"
+                CornerRadius="16"
+                Background="{DynamicResource ContentBackground}"
+                BorderBrush="{DynamicResource CardBorder}"
+                BorderThickness="1"
+                BoxShadow="0 8 32 0 #22000000">
+            <StackPanel Spacing="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="BaiduPcs" FontSize="28" FontWeight="Bold"
+                               Foreground="{DynamicResource AccentColor}" />
+                    <TextBlock Text="简约的百度网盘客户端" Opacity="0.6" />
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="BDUSS" FontSize="12" Opacity="0.7" />
+                    <TextBox x:Name="BdsTextBox"
+                             Text="{Binding BdsCode}"
+                             PlaceholderText="粘贴 BDUSS 值"
+                             PasswordChar="•" />
+                    <TextBlock Text="获取方式：浏览器登录 pan.baidu.com → F12 → 应用/Application → Cookie → 复制 BDUSS 的值"
+                               FontSize="11" Opacity="0.5" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <ToggleButton IsChecked="{Binding IsAdvancedMode}"
+                              Content="高级模式：附加完整 Cookie 串（可选）" />
+
+                <StackPanel IsVisible="{Binding IsAdvancedMode}" Spacing="6">
+                    <TextBlock Text="Cookie 串（可选）" FontSize="12" Opacity="0.7" />
+                    <TextBox Text="{Binding CookieString}"
+                             PlaceholderText="BDUSS=xxx; STOKEN=yyy; ..."
+                             TextWrapping="Wrap" MinHeight="64" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorColor}"
+                           TextWrapping="Wrap" IsVisible="{Binding HasErrorMessage}" />
+
+                <Button Content="登 录" Classes="accent" Height="40"
+                        Command="{Binding LoginCommand}"
+                        IsEnabled="{Binding CanLogin}" />
+
+                <TextBlock Text="{Binding IsBusy, StringFormat=正在验证 BDUSS...}"
+                           FontSize="12" Opacity="0.6" HorizontalAlignment="Center"
+                           IsVisible="{Binding IsBusy}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

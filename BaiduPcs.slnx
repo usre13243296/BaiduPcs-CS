@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj" />
+  <Project Path="BaiduPcs.Core/BaiduPcs.Core.csproj" />
+  <Project Path="BaiduPcsAPP/BaiduPcsAPP.csproj" />
+</Solution>
