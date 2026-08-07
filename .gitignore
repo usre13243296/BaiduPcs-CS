@@ -1,0 +1,19 @@
+# 编译产物
+bin/
+obj/
+*.user
+*.suo
+
+# 参考源码（Go 原版，仅作对照不发布）
+BaiduPCS-Go-main/
+
+# IDE / 系统
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 临时 / 日志
+*.log
+*.tmp
+*.part
