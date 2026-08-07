@@ -3,7 +3,7 @@
 基于 .NET 10 + Avalonia UI 的百度网盘桌面客户端，以 C# 重写 BaiduPCS-Go 的核心能力，提供现代桌面界面与稳定的下载通道。
 
 > **版本：v0.5.9** · 纯 C# 实现 · 发布包支持 Windows / Linux / macOS（Avalonia 跨平台框架）
-
+> <img width="1488" height="982" alt="image" src="https://github.com/user-attachments/assets/287a1b92-dcda-41d0-96bc-9f8547c6de51" />
 ## 功能特性
 
 ### ✅ 已实现
