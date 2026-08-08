@@ -143,16 +143,27 @@ public class DownloaderTests : IDisposable
     [Fact]
     public async Task Download_Cancel_PreservesCheckpoint_ThenResumeCompletes()
     {
+        // 4MB → 256KB 块 × 16 块；每响应 800ms 放慢：探测 + 首轮 8 并发 ≈ 1.6s 才到 9 个请求，
+        // 保证下载持续 > 1s（断点监控循环 ~1s tick 必然落地）且取消时仍有分片在途
+        // （防快机器上瞬时下完导致的竞态：断点未写或取消不生效）
         var content = MakeContent(4 * 1024 * 1024);
         _server.AddFile("/resume.bin", content);
+        _server.AddBehavior(async (ctx, _) =>
+        {
+            await Task.Delay(800);
+            return false; // 只放慢，不短路（继续 ServeFile）
+        });
         var part = PartPath("resume");
         var cp = CheckpointPath("resume");
 
-        // 第一次：中途取消
+        // 第一次：中途取消。等待「断点文件已落地」再取消：断点由监控循环（~1s tick）写入，
+        // 文件存在 = 下载仍在进行（未完成），且取消后断点必然保留——消除"取消太早（无断点）/
+        // 太晚（已下完取消不生效）"的竞态
         using var cts = new CancellationTokenSource();
         var dl1 = CreateDownloader("/resume.bin", readTimeout: TimeSpan.FromSeconds(2));
         var task1 = dl1.DownloadAsync(part, cp, ct: cts.Token);
-        await WaitUntilAsync(() => _server.RequestCount("/resume.bin") >= 4, TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => _server.RequestCount("/resume.bin") >= 5 && File.Exists(cp), TimeSpan.FromSeconds(20),
+            () => $"requests={_server.RequestCount("/resume.bin")}, cp={File.Exists(cp)}");
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task1);
 

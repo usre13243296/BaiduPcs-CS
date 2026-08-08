@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using BaiduPcs.Core.Api;
+using BaiduPcs.Core.Transfer;
 
 namespace BaiduPcs.Core.Download;
 
@@ -46,7 +47,7 @@ public sealed class DownloaderProgress
 /// 与百度协议解耦：只负责把直链内容下载到 .part，支持断点续传（.part.json）、
 /// 并发分片、断流重连、限流退避、备选直链与暂停/恢复/取消。
 /// </summary>
-public sealed class Downloader : IDisposable
+public sealed class Downloader : IDisposable, ITransferEngine
 {
     private const long ProbeSize = 32 * 1024;   // 大小探测请求范围（对齐 Go pcsdownload.go:24）
     private const int BufferSize = 128 * 1024;

@@ -46,6 +46,10 @@ public sealed partial class BaiduPcsApiClient
     public const string OperationCopy = "拷贝文件/目录";
     public const string OperationMove = "移动文件/目录";
     public const string OperationLocateDownload = "获取下载链接";
+    public const string OperationPrecreate = "预创建上传";
+    public const string OperationUploadTmpFile = "上传分片";
+    public const string OperationCreateSuperFile = "合并分片文件";
+    public const string OperationGetPcsServer = "获取上传服务器";
 
     private readonly BaiduHttpClient _http;
     private readonly BaiduSession _session;

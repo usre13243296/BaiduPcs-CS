@@ -110,25 +110,45 @@ public class SpeedMeterTests
     }
 
     [Fact]
-    public void AddBytes_ReturnsApproximateRate()
+    public void AddBytes_WithinFirstSecond_ReturnsPreviousSpeed()
     {
         var meter = new SpeedMeter();
         meter.Add(2000);
         Thread.Sleep(200);
         meter.Add(2000);
-        var rate = meter.GetBytesPerSecond();
-        // 400ms 内 4000 字节 ≈ 10000 B/s，允许 ±50% 抖动
-        Assert.InRange(rate, 5000, 30000);
+        // 首个周期未满 1s：返回上次速度（初始 0），不出现"单样本 + 微秒跨度"的瞬时爆炸
+        Assert.Equal(0, meter.GetBytesPerSecond());
     }
 
     [Fact]
-    public void Add_ExpiredWindow_DropsOldSamples()
+    public void AddBytes_AfterOneSecond_ReturnsRate_ThenClears()
     {
         var meter = new SpeedMeter();
-        meter.Add(1000);
-        Thread.Sleep(1100); // 超过 1s 窗口
+        meter.Add(2000);
+        Thread.Sleep(200);
+        meter.Add(2000);
+        Thread.Sleep(900); // 累计 > 1s
         var rate = meter.GetBytesPerSecond();
-        Assert.Equal(0, rate); // 样本全部过期
+        // 4000 字节 / 1.1s ≈ 3600 B/s，允许 ±60% 抖动（Thread.Sleep 不可靠）
+        Assert.InRange(rate, 1500, 12000);
+        // 重算后周期字节清零：下一个周期（无新字节）速度为 0
+        Thread.Sleep(1100);
+        Assert.Equal(0, meter.GetBytesPerSecond());
+    }
+
+    [Fact]
+    public void SparseSamples_DoNotExplode()
+    {
+        // 稀疏样本（上传场景：每 2s 完成一个 4MB 分片）→ 速度 ≈ 4MB/s，绝不出现 TB/s 级数值
+        var meter = new SpeedMeter();
+        meter.Add(4 * 1024 * 1024);
+        Thread.Sleep(2100);
+        meter.Add(4 * 1024 * 1024);
+        var rate = meter.GetBytesPerSecond();
+        // 8MB / 2.1s ≈ 4MB/s，允许 ±50% 抖动
+        Assert.InRange(rate, 2 * 1024 * 1024, 20 * 1024 * 1024);
+        // 硬性上限：绝不超过 1TB/s（旧滑动窗口模型单样本时可达 TB/s）
+        Assert.True(rate < 1024L * 1024 * 1024 * 1024, $"速度异常爆炸: {rate} B/s");
     }
 }
 

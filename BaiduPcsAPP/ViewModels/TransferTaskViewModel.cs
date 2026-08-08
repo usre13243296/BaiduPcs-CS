@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using BaiduPcs.Core.Download;
+using BaiduPcs.Core.Transfer;
+using BaiduPcs.Core.Upload;
 using BaiduPcsAPP.Services;
 
 namespace BaiduPcsAPP.ViewModels;
@@ -39,16 +40,27 @@ public partial class TransferTaskViewModel : ViewModelBase
     [ObservableProperty]
     public partial string DetailText { get; set; } = string.Empty;
 
-    /// <summary>引擎实例（运行中由 TransferManager 设置）。</summary>
-    internal Downloader? Engine { get; set; }
+    /// <summary>引擎实例（运行中由 TransferManager 设置；下载/上传共用接口）。</summary>
+    internal ITransferEngine? Engine { get; set; }
 
     /// <summary>取消令牌（由 TransferManager 管理）。</summary>
     internal CancellationTokenSource? Cts { get; set; }
 
-    /// <summary>远程路径与保存目录（失败重试用）。</summary>
+    /// <summary>远程路径与保存目录（下载任务：失败重试/完成重命名用）。</summary>
     internal string RemotePath { get; set; } = string.Empty;
 
     internal string SaveDir { get; set; } = string.Empty;
+
+    /// <summary>上传任务：本地文件路径与远端目标目录。</summary>
+    internal string LocalPath { get; set; } = string.Empty;
+
+    internal string RemoteDir { get; set; } = string.Empty;
+
+    /// <summary>是否上传任务（下载分支有 .part 清理/重命名，上传分支无）。</summary>
+    internal bool IsUpload { get; set; }
+
+    /// <summary>上传会话（进程内断点续传：uploadid + 已传分片）。</summary>
+    internal UploadSession? UploadSession { get; set; }
 
     public TransferTaskViewModel(string name, TransferManager? manager = null)
     {

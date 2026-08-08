@@ -21,6 +21,8 @@ public static class ErrorMessageCatalog
             31061 => (errorCode, "文件已存在"),
             31066 => (errorCode, "文件或目录不存在"),
             31079 => (errorCode, "秒传文件失败"),
+            31112 => (errorCode, "超出配额, 网盘容量已满"),
+            31363 => (errorCode, "上传状态过期, 需要重新上传"),
             _ => (errorCode, errorMsg),
         };
     }
@@ -28,6 +30,12 @@ public static class ErrorMessageCatalog
     /// <summary>根据 errno 解析网盘错误信息。</summary>
     public static string FindPanError(int errno)
     {
+        // 上传相关错误码在 pan 域接口（precreate/create）中同样以 errno 返回，与 PCS 表共用文案
+        if (errno is 31061 or 31079 or 31112 or 31363)
+        {
+            return FindPcsError(errno, string.Empty).Message;
+        }
+
         return errno switch
         {
             0 => StrSuccess,

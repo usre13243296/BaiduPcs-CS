@@ -221,7 +221,7 @@ public partial class FileBrowserViewModel : ViewModelBase
         }
     }
 
-    /// <summary>占位：上传引擎接入点（P5 实现真实上传）。</summary>
+    /// <summary>上传本地文件到当前目录（多选；同名自动递增重命名；经 TransferManager 入队调度）。</summary>
     [RelayCommand]
     private async Task UploadFilesAsync()
     {
@@ -231,7 +231,16 @@ public partial class FileBrowserViewModel : ViewModelBase
             return;
         }
 
-        await _dialogs.ShowMessageAsync("提示", "上传引擎将在下一阶段实现。");
+        var queued = 0;
+        foreach (var file in files)
+        {
+            if (_transferManager.EnqueueUpload(file, CurrentPath))
+            {
+                queued++;
+            }
+        }
+
+        StatusText = queued == 0 ? "所选文件均已在上传队列中" : $"已加入上传队列：{queued} 个文件";
     }
 
     /// <summary>复制选中文件的下载直链（仅获取链接，不触发下载；与官方下载并列）。</summary>

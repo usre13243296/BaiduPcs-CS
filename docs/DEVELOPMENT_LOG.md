@@ -140,6 +140,76 @@ BaiduPcsAPP/                 任务层：TransferManager（队列/并发2/暂停
 
 ---
 
+## 三-ter、上传引擎落地（2026-08-08，v0.6 完成）
+
+> 设计对齐 Go BaiduPCS-Go `internal/pcsfunctions/pcsupload/` + `baidupcs/upload.go`。
+> 范围：多文件选择 → 秒传预检（precreate 二合一）→ 分片并发上传（superfile2）→ 合并（create）；
+> 同名自动递增重命名；进程内断点续传；接入现有传输面板。目录递归/跨进程恢复后置。
+
+### 架构（三层与下载对称）
+
+```
+BaiduPcs.Core/Api/BaiduPcsApiClient.Upload.cs   协议层：PrecreateAsync（秒传+会话二合一）/ UploadTmpFileAsync
+                                                 （superfile2 multipart）/ CreateAsync（合并）/ LocateUploadHostsAsync
+BaiduPcs.Core/Upload/                           引擎层：Uploader 主控 / UploadChecksum 三份 MD5 /
+                                                 DataOffsetCalculator（data_offset）/ UploadSession（进程内断点）/ UploadException
+BaiduPcsAPP/                                    任务层：TransferManager.EnqueueUpload + RunUploadAsync 分支；
+                                                 TransferTaskViewModel.Engine 抽象为 ITransferEngine（Core/Transfer/）
+```
+
+### 关键设计决策
+
+1. **秒传与 precreate 二合一**（对齐 Go rapidUploadV2）：一次 POST `pan.baidu.com/api/precreate`，服务器命中返回 `return_type=2` 直接完成，否则返回 `uploadid` 进入分片上传；参数含 `data_offset`（`md5("{uk}{md5}{时间}")` 前 8 hex 取模）+ `data_content`（偏移处 4KB base64 去 `=`）+ `block_list` + `autoinit=1`。
+2. **三份校验和单趟流式计算**：全文件 MD5（content-md5）+ 前 256KB MD5（slice-md5）+ 按分片大小的逐块 MD5（block_list），一次读文件同时喂三个增量哈希（块哈希按块边界切分缓冲）。
+3. **分片与并发**：`<8GB→4MB / 8~32GB→16MB / ≥32GB→64MB`（对齐 Go getBlockSize）；并发统一 4（Go MaxUploadParallel）；host 经 locateupload 动态获取随机选一，失败降级 pcs.baidu.com。
+4. **重名策略（用户决策）**：上传前 meta 探测目标，存在则自动递增重命名（`报告.txt` → `报告2.txt` → `报告3.txt`…），不做询问/覆盖/跳过；探测失败按不存在处理（rtype=3 兜底覆盖）。
+5. **进程内断点续传**：`UploadSession{uploadid, 已传分片 md5}` 由任务层持有（跨 Uploader 实例存活）；失败重试/暂停恢复时复用 uploadid，已传分片跳过；`31363`（上传状态过期）→ 清会话 → 重新 precreate → 整体重传一轮（对齐 Go 删库重传）。
+6. **错误分类**（对齐 Go upload_task_unit.go:338-397）：HTTP 400/401/403/413 与 31061/31112 致命不重试；429/509 限流退避；其余网络错误/远端错误重试（单分片上限 8 次）；退避复用 `DownloadRetryPolicy`。
+7. **引擎接入 UI**：`TransferTaskViewModel.Engine` 由 `Downloader` 硬编码抽象为 `ITransferEngine`（Pause/Resume 两方法，取消走 Cts）；TransferManager 的 `RunAsync` 抽公共调度框架（槽位/状态机/封送），下载/上传各成 `RunDownloadAsync`/`RunUploadAsync` 分支；上传去重键 = 本地文件路径，下载 = 远端路径，互不冲突。
+
+### 踩坑记录（重要）
+
+1. **BCL multipart 无法表达空 filename**（最大坑）：`MultipartFormDataContent.Add(content, name, fileName)` 校验 fileName 非空白（.NET 8+）；而 `ContentDispositionHeaderValue.FileName = ""` 序列化时被**直接省略**（body 里没有 filename 属性），与 Go 的 `filename=""` 不一致。解决：手写 `UploadMultipartContent : HttpContent`（流式序列化，对齐 Go multipartreader 的逐字节格式）。
+2. **URL 编码大小写分裂**：`HttpUtility.ParseQueryString(...).ToString()` 生成的 query 用**小写** hex（`%2f`），而 `FormUrlEncodedContent`（`Uri.EscapeDataString`）用**大写** hex（`%2F`）——上传同时用了两种（superfile2 的 URL query vs precreate/create 的 form body），测试断言必须区分大小写。
+3. **HttpContent 生命周期**：协议层 `using` 释放 multipart（会释放传入的上传流）；Mock handler 同步返回后测试再读 `request.Content` 会 `ObjectDisposedException`——测试必须在 responder 内捕获 body。
+4. **并发任务抛异常**：3 块并发全部 403 时每个 worker 各发 1 次请求（不是重试）；`Task.WhenAll` 只抛第一个异常——断言请求数时按「每块各一次」理解，不要误判为重试。
+5. **传文件流所有权**：`UploadTmpFileAsync` 内 `using` 释放 `UploadMultipartContent`（含 FileStream）——引擎每片新建 FileStream 传入即可，双重释放幂等无碍。
+6. **multipart 误发文件剩余部分**（2026-08-08 修复，用户实测暴露）：直接把整个 FileStream 传给 multipart，流式序列化会从当前 Position 读到 **EOF**——分片 1 会把「分片 1 到文件尾」全部发出。单测当时只断言 multipart 字段名、未断言分片数据长度，未暴露。解决：`ProgressReadStream` 限长子流（只暴露 `[offset, offset+length)`，对齐 Go ReaderLen64 限长语义），并补「分片数据长度 + 偏移内容一致」断言。
+7. **进度/速度统计（用户实测两轮反馈，2026-08-08 深挖）**：
+   - 现象：进度条不走（直到完成瞬满），速度显示 xxxTB/s → 修复后仍 xxxMB/s。
+   - 排查（三路子代理并行，结论互证）：
+     a) **上传侧无时间驱动刷新**：所有 UI 更新挂在读回调上，停顿（等待响应/重试退避/慢网络）期间零刷新；速度一旦算出就冻结在 UI——下载侧有 500ms monitor 心跳（Downloader.cs:294），上传没有。这是「进度不走 + 速度冻结」的总根因。
+     b) **秒传/续传跳过块一次性批量累计**：跳过 300MB 恰逢 1s 重算边界 → speed = 300MB/1s = 285MB/s 并冻结（旧滑动窗口模型同源）。本地瞬间完成的字节不应计入网络速度。
+     c) **重试时进度回调置 null 静默**（此前为防虚高做的设计）——重试期间完全黑屏。
+     d) **checksum 预计算阶段零进度**——大文件开头长时间 0%。
+     e) **SpeedMeter 平台单位混淆**：`_periodTicks = TimeSpan.TicksPerSecond` 与 `Stopwatch` 原始 tick 比较，仅 Frequency==10MHz 时正确；Linux（1e9）上 1s 闸门坍缩为 10ms → 瞬时爆发持续 xxxMB/s。
+   - 修复：
+     - `Uploader` 新增 **RunMonitorAsync 心跳**（500ms，对齐下载侧）：周期刷新进度/速度、让 SpeedMeter 累计按真实时间衰减；
+     - `ReportProgress` 增加 `countSpeed` 参数：checksum 读取/续传跳过/秒传等本地瞬间完成的字节**只计进度不计速度**，杜绝批量累计虚高；
+     - 重试不再静默（每次尝试都插桩，clamp 兜底虚高）；
+     - checksum 阶段插桩进度（单调不倒退：checksum 读字节计入总进度）；
+     - `SpeedMeter._periodTicks = Stopwatch.Frequency`（平台无关）；
+     - `TransferManager.RunUploadAsync` 开头 `await Task.Run(...)` 确保 Progress<T> 在线程池创建（槽位空闲时 RunAsync 可能同步继续在 UI 线程，捕获 DispatcherSynchronizationContext 导致回调双跳）。
+   - 另确认（Agent 排查排除项）：请求体是 SocketsHttpHandler 直写 socket 的流式发送（Content-Length 已知走 ContentLengthWriteStream），**不存在**请求体缓冲/预读；307/308 重定向会重序列化已耗尽流导致空 body 悬挂（上限 50s 超时后重试）——百度 superfile2 不重定向，列为已知风险。
+8. **秒传与真实上传的进度区分（用户实测证实秒传猜想后落地）**：用户上传内容 MD5 在百度全网已存在 → precreate 命中 `return_type=2` → 服务器零接收、瞬间完成、无速度（先前"极快 + 无速度"现象即此）。同时发现上一版「checksum 阶段插桩进度」的缺陷：checksum 读一遍 = 总字节 → 进度提前打满 100%，真实上传阶段反而冻结不动。修复：
+   - checksum 预计算**不再计入上传进度**（进度从分片上传开始走；checksum 阶段由监控心跳保持 UI 刷新）；
+   - 秒传命中时进度**瞬间读满**（0→100，无渐进中间值），`Uploader.WasRapidUpload` 标记命中；
+   - `TransferManager` 完成时 DetailText 标注「秒传命中：{远端路径}」，与真实上传「{远端路径}」可一眼区分。
+8. **测试时序竞态（既有下载测试偶发）**：`Download_Cancel_PreservesCheckpoint` 在快机器上偶发——取消依赖断点监控循环（~1s tick）落地，小文件瞬时下完导致「断点未写」或「取消不生效」。修复：等待「请求数 ≥5 且断点文件已存在」再取消（断点存在 = 下载未完成且取消后必然保留），彻底消除竞态；恢复阶段的「请求计数达到 N」类条件同理需注意分片档位（16MB → 4MB 块仅 4 块，总请求数 5）。
+
+### 测试
+
+- 协议层 14 个用例（precreate 参数全断言/return_type/uploadid 复用/错误码；superfile2 URL+multipart 字段；create 顺序；locateupload 过滤规则；31112/31363 映射）。
+- 引擎层 30 个用例（三份 MD5 向量/跨块边界/分片档位/data_offset 取模；秒传命中无分片请求；单块/多块全流程与进度单调；单片失败重试；403 致命；31363 自动重传；会话续传跳过已传片；暂停无请求/恢复续传；取消；重名递增 2/3；本地文件缺失/空文件）。
+- 全量 **162 个用例全绿**（旧 118 + 新增 44）。
+
+### 遗留（后置，README/文档已注明）
+
+- 目录递归上传（v0.7 与搜索/移动一起）；跨进程重启恢复（需任务持久化 + uploadid 会话探测）；
+- >32GB 提示、>64MB 前置空间检查（靠 31112 错误映射兜底）；host 每 256 片轮换；上传限速。
+
+---
+
 ## 四、V0.5 功能清单
 
 - [x] BDUSS 登录 + Cookie 初始化/持久化
@@ -155,9 +225,9 @@ BaiduPcsAPP/                 任务层：TransferManager（队列/并发2/暂停
 
 ## 五、Roadmap
 
-### v0.6 — 上传与传输管理
-- 上传引擎：单文件 → 分片（precreate + superfile2）→ 秒传（md5 预检）→ 断点续传
-- 传输任务管理：队列、并发数、暂停/取消、任务持久化（重启恢复）
+### v0.6 — 上传与传输管理 ✅ 已落地（2026-08-08）
+- ~~上传引擎：单文件 → 分片（precreate + superfile2）→ 秒传（md5 预检）→ 断点续传~~ ✅
+- ~~传输任务管理：队列、并发数、暂停/取消、任务持久化（重启恢复）~~ ✅（暂停/取消/队列已落地；**任务持久化（跨进程恢复）后置**）
 
 ### v0.7 — 文件管理增强
 - 搜索、回收站（列表/还原/清空）、复制/移动、多选批处理
