@@ -1,4 +1,4 @@
-# BaiduPcs（C# 版百度网盘客户端）
+# BaiduPcs-CS（C# 版百度网盘客户端）
 
 基于 .NET 10 + Avalonia UI 的百度网盘桌面客户端，以 C# 重写 BaiduPCS-Go 的核心能力，提供现代桌面界面与稳定的下载通道。**Core 完全解耦**——同一份核心代码可接 Avalonia 桌面（Windows / Linux / macOS）、Linux ARM（NAS/软路由），未来可直出安卓（MAUI）与 Web 管理界面。
 
