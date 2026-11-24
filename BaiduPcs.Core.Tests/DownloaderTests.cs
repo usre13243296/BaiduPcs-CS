@@ -265,22 +265,41 @@ public class DownloaderTests : IDisposable
         var content = MakeContent(4 * 1024 * 1024);
         _server.AddFile("/pause.bin", content);
 
+        // 每个响应延迟 300ms：本地服务器在快机器上几十毫秒就能传完 4MB，
+        // 暂停很可能落在下载完成之后（断点已被删除）→ 断言偶发失败。
+        // 这里把下载拉长到多个波次，保证暂停一定发生在下载进行中。
+        _server.AddBehavior(async (ctx, srv) =>
+        {
+            if (ctx.Request.Url!.AbsolutePath != "/pause.bin")
+            {
+                return false;
+            }
+
+            await Task.Delay(300);
+            return false; // 延迟后交给默认文件响应
+        });
+
         var dl = CreateDownloader("/pause.bin", readTimeout: TimeSpan.FromSeconds(2));
         var part = PartPath("pause");
         var cp = CheckpointPath("pause");
         var task = dl.DownloadAsync(part, cp);
         await WaitUntilAsync(
-            () => _server.RequestCount("/pause.bin") >= 4,
-            TimeSpan.FromSeconds(10),
+            () => _server.RequestCount("/pause.bin") >= 2,
+            TimeSpan.FromSeconds(15),
             () => string.Join(" | ", _server.Requests.Select(r => $"{r.Path} [{r.Range}] {r.StatusCode}")));
 
         await dl.PauseAsync();
-        await Task.Delay(300); // 让在途请求落地
-        var bytesAtPause = new FileInfo(part).Length;
+        await WaitUntilAsync(
+            () => File.Exists(cp) || task.IsCompleted,
+            TimeSpan.FromSeconds(5),
+            () => "暂停后断点未落地");
+        Assert.False(task.IsCompleted, "下载在暂停生效前已完成，测试时序失效");
         Assert.True(File.Exists(cp), "暂停时应持久化断点");
 
+        // 等暂停瞬间的在途分片落地后再采样，避免把「在途写入」误判成「暂停期间继续下载」
+        await Task.Delay(1000);
+        var bytesAtPause = new FileInfo(part).Length;
         await Task.Delay(1500);
-        // 暂停期间不写入新字节
         Assert.Equal(bytesAtPause, new FileInfo(part).Length);
 
         await dl.ResumeAsync();
