@@ -13,6 +13,14 @@
 | [DEVELOPMENT_LOG](DEVELOPMENT_LOG.md) | 架构决策与踩坑记录：登录链路、上传 / 下载引擎、Avalonia 迁移、性能排查 | 维护者 / 深入贡献者 |
 | [DOWNLOAD_ENGINE_DESIGN](DOWNLOAD_ENGINE_DESIGN.md) | 下载引擎的完整设计方案：分片、断点、重试、暂停恢复、测试计划 | 维护者 |
 
+## 资源文件
+
+| 文件 | 用途 | 说明 |
+|------|------|------|
+| [screenshot.png](screenshot.png) | README 主界面截图 | 1488 × 982，替换功能后建议同步更新 |
+| [social-preview.png](social-preview.png) | GitHub 社交分享卡片 | 1280 × 640（1.91:1），需在仓库 Settings → Social preview 手动上传 |
+| [../tools/make-social-preview.ps1](../tools/make-social-preview.ps1) | 预览图生成脚本 | 由 screenshot.png 合成，改文案后重跑即可 |
+
 ## 建议阅读顺序
 
 1. **想用起来**：README → 快速开始 → 常见问题 FAQ。
