@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://github.com/usre13243296/BaiduPcs-CS/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/usre13243296/BaiduPcs-CS?label=release&style=flat-square&color=4D6BFE"></a>
   <a href="https://github.com/usre13243296/BaiduPcs-CS/releases"><img alt="下载量" src="https://img.shields.io/github/downloads/usre13243296/BaiduPcs-CS/total?style=flat-square&color=blue"></a>
+  <a href="https://github.com/usre13243296/BaiduPcs-CS/actions/workflows/build.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/usre13243296/BaiduPcs-CS/build.yml?branch=main&style=flat-square&label=CI"></a>
   <a href="https://github.com/usre13243296/BaiduPcs-CS/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/usre13243296/BaiduPcs-CS?style=flat-square&color=yellow"></a>
   <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white">
   <img alt="Avalonia 12.1" src="https://img.shields.io/badge/Avalonia-12.1-8B44AC?style=flat-square">
@@ -16,7 +17,7 @@
 协议内核 `BaiduPcs.Core` 与 UI 完全解耦、零 Avalonia 依赖，同一份核心代码可以接 Avalonia 桌面、MAUI 移动端或 Web 管理界面——这是本项目与 `BaiduPCS-Go`（命令行）和官方客户端（闭源）最本质的区别。
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/c6a07365-6dd8-4b26-8444-5f1919bf6175" alt="BaiduPcs-CS 主界面截图：左侧导航为「文件 / 传输 / 设置」，工具栏包含新建文件夹、上传、复制链接、下载、重命名、删除，底部传输停靠栏显示下载进度与 29.90MB/s 实时速度" width="100%">
+  <img src="docs/screenshot.png" alt="BaiduPcs-CS 主界面截图：左侧导航为「文件 / 传输 / 设置」，工具栏包含新建文件夹、上传、复制链接、下载、重命名、删除，底部传输停靠栏显示下载进度与 29.90MB/s 实时速度" width="100%">
 </p>
 
 > **非官方项目声明**：BaiduPcs-CS 与百度公司无任何关联，不是官方客户端。项目仅用于学习与个人使用，请勿商用。使用第三方接口存在账号风控风险，请自行评估。
