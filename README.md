@@ -17,7 +17,7 @@
 协议内核 `BaiduPcs.Core` 与 UI 完全解耦、零 Avalonia 依赖，同一份核心代码可以接 Avalonia 桌面、MAUI 移动端或 Web 管理界面——这是本项目与 `BaiduPCS-Go`（命令行）和官方客户端（闭源）最本质的区别。
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="BaiduPcs-CS 主界面截图：左侧导航为「文件 / 传输 / 设置」，工具栏包含新建文件夹、上传、复制链接、下载、重命名、删除，底部传输停靠栏显示下载进度与 29.90MB/s 实时速度" width="100%">
+  <img src="docs/social-preview.png" alt="BaiduPcs-CS 主界面截图：左侧导航为「文件 / 传输 / 设置」，工具栏包含新建文件夹、上传、复制链接、下载、重命名、删除，底部传输停靠栏显示下载进度与 29.90MB/s 实时速度" width="100%">
 </p>
 
 > **非官方项目声明**：BaiduPcs-CS 与百度公司无任何关联，不是官方客户端。项目仅用于学习与个人使用，请勿商用。使用第三方接口存在账号风控风险，请自行评估。
