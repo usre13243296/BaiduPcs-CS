@@ -190,27 +190,23 @@ dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj
 2. **协议与引擎完整** —— 登录（`Auth/`）、API 客户端（`Api/`）、下载引擎（`Download/`）、上传引擎（`Upload/`）全部位于 Core。下载引擎只接收 `Urls + CookieHeader`，与百度协议解耦，可复用为通用下载器。
 3. **引擎可独立测试** —— 164 个用例不依赖任何 UI 框架：密码学算法对齐 Go 测试向量，协议层用 mock handler 验证参数，引擎层用本地测试服务器验证并发、断点、重试、暂停恢复。
 
-```mermaid
-flowchart TB
-    subgraph APP["BaiduPcsAPP · Avalonia 桌面（可替换为 MAUI / Web 前端）"]
-        direction LR
-        A1["ViewModels"]
-        A2["Views（XAML）"]
-        A3["Services<br/>对话框 · 剪贴板 · 传输队列"]
-    end
-
-    subgraph CORE["BaiduPcs.Core · 零 UI 依赖"]
-        direction LR
-        C1["Api<br/>请求管道 · 错误映射"]
-        C2["Auth<br/>BDUSS 会话 · Cookie"]
-        C3["Crypto<br/>NetdiskSign"]
-        C4["Download<br/>分片 · 断点 · 重试"]
-        C5["Upload<br/>秒传 · 分片 · 断点"]
-        C6["Transfer<br/>ITransferEngine"]
-    end
-
-    APP -- "ITransferEngine / IDialogService" --> CORE
-    CORE -- "HTTPS · Cookie · netdisk UA" --> NET["*.baidu.com 网盘接口"]
+```
+BaiduPcsAPP —— Avalonia 桌面（可替换为 MAUI / Web 前端）
+    ViewModels · Views · Services（对话框 / 剪贴板 / 传输队列）
+        │
+        │  ITransferEngine · IDialogService
+        ▼
+BaiduPcs.Core —— 零 UI 依赖
+    Api          请求管道 · 错误映射 · 各接口封装
+    Auth         BDUSS 会话 · Cookie 收集与持久化
+    Crypto       NetdiskSign · Md5Obfuscator
+    Download     多线程分片 · 断点续传 · 重试 · 暂停取消
+    Upload       秒传 · 分片 · 进程内断点 · 重名递增
+    Transfer     ITransferEngine（下载 / 上传共用接口）
+        │
+        │  HTTPS · Cookie · netdisk UA
+        ▼
+*.baidu.com 网盘接口
 ```
 
 ## 技术栈
@@ -393,4 +389,4 @@ Download the latest build from [Releases](https://github.com/usre13243296/BaiduP
 - **[Avalonia](https://avaloniaui.net/)**、**[CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet)**：跨平台 UI 与 MVVM 基础设施。
 - **DeepSeek / DeepSeek Harness**：架构设计、协议分析、排障与文档整理过程中的 AI 协作。
 
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+[![powered by dsh](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
