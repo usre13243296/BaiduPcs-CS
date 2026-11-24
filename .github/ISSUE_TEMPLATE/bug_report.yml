@@ -1,0 +1,109 @@
+name: Bug 反馈
+description: 报告崩溃、下载/上传失败、界面异常等问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！提交前请先搜索[已有 Issue](https://github.com/usre13243296/BaiduPcs-CS/issues?q=is%3Aissue)。
+
+        ⚠️ 请务必删除日志、截图中的 **BDUSS / Cookie / UID** 等敏感信息，也不要粘贴 `accounts.json` 的内容。
+
+  - type: input
+    id: version
+    attributes:
+      label: 客户端版本
+      description: 发布包文件名或「设置」页显示的版本号，例如 v0.6.0
+      placeholder: v0.6.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 操作系统与架构
+      options:
+        - Windows x64
+        - Windows arm64
+        - Linux x64
+        - Linux arm64（NAS / 软路由 / 树莓派）
+        - macOS Intel
+        - macOS Apple Silicon
+        - 从源码构建（dotnet run）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题类型
+      options:
+        - 登录 / 账号
+        - 文件浏览
+        - 下载
+        - 上传
+        - 传输任务管理
+        - 界面 / 显示
+        - 打包 / 启动
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请写出能稳定复现的最小步骤
+      placeholder: |
+        1. 登录后进入 /电影 目录
+        2. 选中 1.2GB 的 xxx.mkv，点击「下载」
+        3. 约 30 秒后任务变为「失败」，错误为 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 错误信息
+      description: |
+        配置目录下 `app.log` 的末尾片段，或「传输」页显示的完整错误详情。
+        配置目录：Windows `%APPDATA%\BaiduPcsApp`、Linux `~/.config/BaiduPcsApp`、macOS `~/Library/Application Support/BaiduPcsApp`。
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、是否使用代理、文件大小、是否会员账号（不必提供账号信息）等
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认事项
+      options:
+        - label: 我已经搜索过现有 Issue，确认不是重复问题
+          required: true
+        - label: 我提供的日志与截图中已删除 BDUSS / Cookie / UID 等敏感信息
+          required: true
+        - label: 我使用的是本仓库 Releases 页或源码构建的版本（不是第三方修改版）
+          required: true

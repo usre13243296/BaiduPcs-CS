@@ -1,0 +1,61 @@
+name: 功能建议
+description: 提出新功能或改进想法
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提案前建议先看 README 的「路线图」，避免与已规划内容重复。
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 功能分类
+      options:
+        - 下载（多线程 / 限速 / 通道策略）
+        - 上传（目录递归 / 断点恢复）
+        - 文件管理（搜索 / 回收站 / 复制移动 / 多选）
+        - 分享
+        - 设置（代理 / UA / 并发 / 限速）
+        - 界面 / 体验
+        - 平台支持（移动端 / Web / NAS）
+        - 开发者体验（API / 文档 / 测试）
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题
+      description: 描述使用场景与当前的不便，而不是直接给实现方案
+      placeholder: 例如：NAS 上没有图形界面，希望 Core 能提供 CLI 入口，方便用 systemd 定时备份网盘目录。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的方案
+      description: 如果有具体想法可以写在这里；没有也可以留空
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案
+      description: 你目前是怎么绕过这个问题的（其他工具、脚本等）
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认事项
+      options:
+        - label: 我已查看 README 路线图，确认该功能尚未在规划中
+          required: true
+        - label: 该功能不涉及绕过付费、批量薅带宽或规避风控
+          required: true

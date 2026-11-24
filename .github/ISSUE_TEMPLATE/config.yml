@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用前先看 README 与 FAQ
+    url: https://github.com/usre13243296/BaiduPcs-CS#常见问题-faq
+    about: 下载速度、403、.part 文件、未签名提示等常见问题已在 README 的 FAQ 中说明。
+  - name: 安全问题请走私密渠道
+    url: https://github.com/usre13243296/BaiduPcs-CS/security/advisories/new
+    about: 涉及凭证泄露、数据安全的问题请通过 Security Advisories 私密报告，不要公开提交。
+  - name: 交流群
+    url: https://github.com/usre13243296/BaiduPcs-CS#参与贡献
+    about: QQ 群 801154677，适合快速反馈与使用交流。
