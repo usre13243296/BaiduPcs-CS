@@ -1,0 +1,40 @@
+# BaiduPcs-CS
+
+> BaiduPcs-CS 是一个用 C# / .NET 10 + Avalonia 重写的百度网盘桌面客户端（非官方），支持 Windows、Linux、macOS 以及 NAS / 软路由等 ARM64 设备，提供 BDUSS 登录、文件浏览、多线程分片下载、断点续传、秒传上传与传输队列。
+
+项目参考 MIT 开源的 [BaiduPCS-Go](https://github.com/qjfoidnh/BaiduPCS-Go) 的协议实现，用 C# 完整重写。协议内核 `BaiduPcs.Core` 与 UI 完全解耦、零 Avalonia 依赖，可复用于桌面、移动端（MAUI）或 Web 管理界面。许可证为 MIT。
+
+## 文档
+
+- [README](https://github.com/usre13243296/BaiduPcs-CS/blob/main/README.md)：项目介绍、功能特性、安装与使用、架构、常见问题
+- [CHANGELOG](https://github.com/usre13243296/BaiduPcs-CS/blob/main/CHANGELOG.md)：版本变更记录
+- [CONTRIBUTING](https://github.com/usre13243296/BaiduPcs-CS/blob/main/CONTRIBUTING.md)：开发环境、代码约定、提交流程
+- [SECURITY](https://github.com/usre13243296/BaiduPcs-CS/blob/main/SECURITY.md)：敏感数据说明与漏洞报告渠道
+- [DEVELOPMENT_LOG](https://github.com/usre13243296/BaiduPcs-CS/blob/main/docs/DEVELOPMENT_LOG.md)：架构决策与踩坑记录
+- [DOWNLOAD_ENGINE_DESIGN](https://github.com/usre13243296/BaiduPcs-CS/blob/main/docs/DOWNLOAD_ENGINE_DESIGN.md)：下载引擎设计方案
+
+## 关键事实
+
+- 名称：BaiduPcs-CS（百度网盘 C# 客户端）
+- 定位：非官方、开源（MIT）、跨平台桌面客户端
+- 技术栈：C# / .NET 10 / Avalonia 12.1 / CommunityToolkit.Mvvm 8.4
+- 支持平台：Windows x64、Windows arm64、Linux x64、Linux arm64、macOS x64、macOS arm64
+- 当前版本：v0.6.0；发布包为自包含单文件，无需安装 .NET 运行时
+- 测试：164 个单元与集成用例，不依赖 UI 框架
+- 数据流向：所有请求直连 `*.baidu.com`，无中间服务器、无遥测；BDUSS 仅以明文保存在本机 `accounts.json`
+
+## 核心能力
+
+- BDUSS 登录，支持高级 Cookie 串、Cookie 自动收集与持久化、多账号本地保存
+- 文件浏览：列表、面包屑、新建文件夹、重命名、删除、空间配额
+- 下载：locatedownload 签名直链为主通道，失败降级官方 `method=download`；统一 8 并发分片；`.part.json` 分片级断点续传；403/404/416 换链、429/509 退避、断流重连
+- 上传：秒传预检、4 / 16 / 64 MB 分片、4 并发、三份 MD5 单趟计算、同名自动递增、进程内断点续传，单文件上限 128 GB
+- 传输管理：队列（同时 2 个）、暂停 / 恢复 / 取消 / 删除、去重、错误详情
+
+## 常见问题
+
+- 是否是百度官方产品：不是，与百度公司无关联，仅供学习与个人使用。
+- 会不会泄露 BDUSS：不会上传到任何服务器；`accounts.json` 为本地明文文件，请勿分享。
+- 下载速度：会员账号 8 并发实测 20–30 MB/s；非会员受服务端按账号总量限速（约 100 KB/s），增加并发无效。
+- 支持平台：6 个 RID 发布包，含 NAS / 软路由可用的 linux-arm64。
+- 未实现功能：分享、回收站、搜索、在线预览、目录递归上传、跨进程任务恢复（见 README 路线图）。
