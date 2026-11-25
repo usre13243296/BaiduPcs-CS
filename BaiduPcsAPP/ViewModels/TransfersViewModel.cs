@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace BaiduPcsAPP.ViewModels;
 
 /// <summary>
-/// 传输面板（下载/上传队列）。当前为 UI 骨架，P4/P5 接入真实引擎。
+/// 传输面板（下载/上传队列）。任务来自 <see cref="Services.TransferManager"/>，
+/// 订阅每个任务的 State 变化以刷新计数。
 /// </summary>
 public partial class TransfersViewModel : ViewModelBase
 {
@@ -27,9 +29,24 @@ public partial class TransfersViewModel : ViewModelBase
 
     public bool HasNoTasks => !HasTasks;
 
+    /// <summary>任务列表是否可见（有任务且未收起）。</summary>
+    public bool ShowTaskList => HasTasks && IsExpanded;
+
+    /// <summary>「暂无传输任务」提示是否可见（无任务且未收起）。</summary>
+    public bool ShowEmptyHint => !HasTasks && IsExpanded;
+
     public string ExpandText => IsExpanded ? "收起 ▾" : "展开 ▴";
 
-    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ExpandText));
+    partial void OnIsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ExpandText));
+        OnPropertyChanged(nameof(ShowTaskList));
+        OnPropertyChanged(nameof(ShowEmptyHint));
+    }
+
+    /// <summary>收起 / 展开传输面板（原来这个按钮没有命令，点了没反应）。</summary>
+    [RelayCommand]
+    private void ToggleExpand() => IsExpanded = !IsExpanded;
 
     /// <summary>添加一个任务（线程安全，可在后台线程调用）。</summary>
     public void AddTask(TransferTaskViewModel task)
@@ -37,8 +54,7 @@ public partial class TransfersViewModel : ViewModelBase
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             Tasks.Add(task);
-            OnPropertyChanged(nameof(HasTasks));
-            OnPropertyChanged(nameof(HasNoTasks));
+            NotifyListState();
             task.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(TransferTaskViewModel.State))
@@ -56,10 +72,17 @@ public partial class TransfersViewModel : ViewModelBase
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             Tasks.Remove(task);
-            OnPropertyChanged(nameof(HasTasks));
-            OnPropertyChanged(nameof(HasNoTasks));
+            NotifyListState();
             RefreshCounters();
         });
+    }
+
+    private void NotifyListState()
+    {
+        OnPropertyChanged(nameof(HasTasks));
+        OnPropertyChanged(nameof(HasNoTasks));
+        OnPropertyChanged(nameof(ShowTaskList));
+        OnPropertyChanged(nameof(ShowEmptyHint));
     }
 
     private void RefreshCounters()

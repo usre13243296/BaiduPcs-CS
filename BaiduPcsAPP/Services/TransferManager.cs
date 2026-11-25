@@ -209,6 +209,7 @@ public sealed class TransferManager
             SetTask(task, t =>
             {
                 t.State = TransferTaskState.Completed;
+                t.Progress = 100;
                 t.SpeedText = string.Empty;
             });
         }
@@ -260,11 +261,11 @@ public sealed class TransferManager
         });
         task.Engine = engine;
 
-        var progress = new Progress<DownloaderProgress>(p => SetTask(task, t =>
+        var progress = new UiProgress<DownloaderProgress>(p =>
         {
-            t.Progress = p.Percent;
-            t.SpeedText = $"{SizeFormatter.ConvertFileSize((long)p.SpeedBytesPerSecond, 2)}/s";
-        }));
+            task.Progress = p.Percent;
+            task.SpeedText = $"{SizeFormatter.ConvertFileSize((long)p.SpeedBytesPerSecond, 2)}/s";
+        });
 
         await engine.DownloadAsync(partPath, checkpointPath, progress, ct).ConfigureAwait(false);
 
@@ -291,11 +292,11 @@ public sealed class TransferManager
         }, task.UploadSession ?? new UploadSession());
         task.Engine = uploader;
 
-        var progress = new Progress<UploadProgress>(p => SetTask(task, t =>
+        var progress = new UiProgress<UploadProgress>(p =>
         {
-            t.Progress = p.Percent;
-            t.SpeedText = $"{SizeFormatter.ConvertFileSize((long)p.SpeedBytesPerSecond, 2)}/s";
-        }));
+            task.Progress = p.Percent;
+            task.SpeedText = $"{SizeFormatter.ConvertFileSize((long)p.SpeedBytesPerSecond, 2)}/s";
+        });
 
         await uploader.UploadAsync(progress, ct).ConfigureAwait(false);
 
@@ -356,6 +357,40 @@ public sealed class TransferManager
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // 清理失败不影响状态
+        }
+    }
+
+    /// <summary>
+    /// 把引擎进度封送到 UI 线程：**按 Report 的调用顺序**投递，并把「来不及处理的最新值」合并成一次更新。
+    /// 不能直接用 <see cref="Progress{T}"/>：它在后台线程创建时没有 SynchronizationContext，
+    /// 回调会并发排队到线程池，与随后的 <see cref="SetTask"/> 形成两跳无序号异步，
+    /// UI 上的进度/速度可能乱序回退——实测表现为速度在 600KB/s 与 0 之间来回跳。
+    /// </summary>
+    private sealed class UiProgress<T> : IProgress<T>
+        where T : class
+    {
+        private readonly Action<T> _apply;
+        private T? _latest;
+        private int _pending;
+
+        public UiProgress(Action<T> apply) => _apply = apply;
+
+        public void Report(T value)
+        {
+            _latest = value;
+            if (Interlocked.Exchange(ref _pending, 1) == 0)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(Drain);
+            }
+        }
+
+        private void Drain()
+        {
+            _pending = 0;
+            if (_latest is { } value)
+            {
+                _apply(value);
+            }
         }
     }
 

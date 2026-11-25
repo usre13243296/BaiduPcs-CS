@@ -10,12 +10,12 @@
             <TextBlock Grid.Column="1" Opacity="0.6" FontSize="12" VerticalAlignment="Center" Margin="8,0"
                        Text="{Binding RunningCount, StringFormat={}{0} 个进行中}">
             </TextBlock>
-            <Button Grid.Column="2" Content="{Binding ExpandText}" />
+            <Button Grid.Column="2" Content="{Binding ExpandText}" Command="{Binding ToggleExpandCommand}" />
         </Grid>
 
         <ListBox Grid.Row="1" ItemsSource="{Binding Tasks}" MaxHeight="200"
                  BorderThickness="0" Background="Transparent"
-                 IsVisible="{Binding HasTasks}">
+                 IsVisible="{Binding ShowTaskList}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:TransferTaskViewModel">
                     <Grid ColumnDefinitions="*,Auto" MinHeight="44" Margin="4,2">
@@ -49,6 +49,6 @@
         </ListBox>
 
         <TextBlock Grid.Row="1" Text="暂无传输任务" Opacity="0.4" HorizontalAlignment="Center" Margin="0,12"
-                   IsVisible="{Binding HasNoTasks}" />
+                   IsVisible="{Binding ShowEmptyHint}" />
     </Grid>
 </UserControl>
