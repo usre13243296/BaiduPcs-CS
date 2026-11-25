@@ -25,6 +25,13 @@ internal sealed class DownloaderContext
     /// <summary>暂停/恢复门控（初始放行）。</summary>
     public readonly AsyncManualResetEvent PauseGate = new(signaled: true);
 
+    /// <summary>
+    /// 断点快照与分片分配互斥：分片从生成器取出（GenBegin 前移）到落到 worker 之间有一个瞬间，
+    /// 若快照恰在此刻保存，该分片既不在 Ranges 里、又已被 GenBegin 跨过 → 恢复后成空洞。
+    /// 快照取数期间持锁，分配区间也持同一把锁（两端都不含 await，可安全用 lock）。
+    /// </summary>
+    public readonly object CheckpointSync = new();
+
     /// <summary>worker 完成信号：唤醒监控循环立即补片。</summary>
     public readonly AsyncManualResetEvent NeedWork = new();
 
@@ -69,13 +76,20 @@ internal sealed class DownloaderContext
 
         try
         {
-            var cp = new DownloadCheckpoint
+            // 快照取数在锁内完成：与"从生成器取片并 Assign 给 worker"互斥，
+            // 保证 Ranges ∪ 已落盘区间 覆盖 [0, GenBegin) 无缺口。
+            DownloadCheckpoint cp;
+            lock (CheckpointSync)
             {
-                TotalSize = TotalSize,
-                BlockSize = BlockSize,
-                GenBegin = Gen.Begin,
-                Ranges = Workers.Where(w => w.HasRange).Select(w => w.RemainingRange).ToList(),
-            };
+                cp = new DownloadCheckpoint
+                {
+                    TotalSize = TotalSize,
+                    BlockSize = BlockSize,
+                    GenBegin = Gen.Begin,
+                    Ranges = Workers.Where(w => w.HasRange).Select(w => w.RemainingRange).ToList(),
+                };
+            }
+
             cp.Save(CheckpointPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)

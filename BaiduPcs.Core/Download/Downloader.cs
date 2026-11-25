@@ -219,16 +219,20 @@ public sealed class Downloader : IDisposable, ITransferEngine
             else
             {
                 // 全新：初始分配 parallel 个分片，其余由监控循环补片
-                for (var i = 0; i < parallel; i++)
+                // 取片 + Assign 整体持 CheckpointSync 锁，避免快照读到"已分配未落 worker"的空隙
+                lock (_ctx.CheckpointSync)
                 {
-                    if (!gen.TryGenerate(out var r))
+                    for (var i = 0; i < parallel; i++)
                     {
-                        break;
-                    }
+                        if (!gen.TryGenerate(out var r))
+                        {
+                            break;
+                        }
 
-                    var w = new ChunkWorker(_ctx, ct);
-                    workers.Add(w);
-                    w.Assign(r);
+                        var w = new ChunkWorker(_ctx, ct);
+                        workers.Add(w);
+                        w.Assign(r);
+                    }
                 }
             }
 
@@ -309,20 +313,23 @@ public sealed class Downloader : IDisposable, ITransferEngine
                 }
             }
 
-            // 补片：给空闲 worker 分配新分片
-            foreach (var w in workers)
+            // 补片：给空闲 worker 分配新分片（与断点快照互斥，见 CheckpointSync 注释）
+            lock (_ctx.CheckpointSync)
             {
-                if (w.HasRange)
+                foreach (var w in workers)
                 {
-                    continue;
-                }
+                    if (w.HasRange)
+                    {
+                        continue;
+                    }
 
-                if (!gen.TryGenerate(out var r))
-                {
-                    break;
-                }
+                    if (!gen.TryGenerate(out var r))
+                    {
+                        break;
+                    }
 
-                w.Assign(r);
+                    w.Assign(r);
+                }
             }
 
             // 完成判定：无未分配分片且所有 worker 空闲

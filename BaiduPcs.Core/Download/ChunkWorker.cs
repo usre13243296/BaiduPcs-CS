@@ -177,11 +177,11 @@ internal sealed class ChunkWorker
                                 break; // EOF 早于范围结束：断流 → 重连
                             }
 
+                            await _ctx.WriteAtAsync(buffer.AsMemory(0, read), begin, ct).ConfigureAwait(false);
                             begin += read;
                             Volatile.Write(ref _rangeBegin, begin);
                             Interlocked.Add(ref _ctx.DownloadedBytes, read);
                             _ctx.Speed.Add(read);
-                            await _ctx.WriteAtAsync(buffer.AsMemory(0, read), begin - read, ct).ConfigureAwait(false);
                         }
                     }
 
