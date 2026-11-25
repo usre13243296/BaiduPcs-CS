@@ -20,8 +20,13 @@ public sealed class BaiduHttpOptions
     /// <summary>HTTP 代理地址（如 http://127.0.0.1:7890），空表示不设置</summary>
     public string? ProxyAddress { get; set; }
 
-    /// <summary>是否忽略 TLS 证书校验（与 Go 端 InsecureSkipVerify 行为一致）</summary>
-    public bool BypassSslValidation { get; set; } = true;
+    /// <summary>
+    /// 是否忽略 TLS 证书校验（仅用于企业代理自签证书等特殊场景）。
+    /// 默认 <c>false</c>：本客户端每个请求都携带 BDUSS / STOKEN 等登录凭证，
+    /// 关闭校验等于把账号交给链路上的任何人（公共 Wi-Fi、恶意代理）。
+    /// 如需关闭，请在调用方显式设置为 <c>true</c> 并让用户知情。
+    /// </summary>
+    public bool BypassSslValidation { get; set; }
 }
 
 /// <summary>

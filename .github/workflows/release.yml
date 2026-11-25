@@ -1,0 +1,95 @@
+name: release
+
+# 打 tag（v0.6.1 / V0.6.1 均可）后自动按 6 个 RID 出包，产物作为 workflow artifact 上传，
+# 由维护者确认后手动挂到 GitHub Release（见 docs/MAINTENANCE.md §四 发布流程）。
+#
+# 说明：这里刻意不自动创建 Release——发布是对外动作，保留人工确认环节。
+
+on:
+  push:
+    tags: ['v*', 'V*']
+  workflow_dispatch:
+    inputs:
+      note:
+        description: '手动触发时的备注（仅用于显示）'
+        required: false
+        default: ''
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    name: 发布包 ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: windows-latest, rid: win-arm64 }
+          - { os: ubuntu-latest,  rid: linux-x64 }
+          - { os: ubuntu-latest,  rid: linux-arm64 }
+          - { os: macos-latest,   rid: osx-x64 }
+          - { os: macos-latest,   rid: osx-arm64 }
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # tag 名可能是 v0.6.1 或 V0.6.1：统一成 BaiduPcs-v0.6.1-<rid>.zip 的命名
+      - name: 规范版本号
+        id: ver
+        shell: bash
+        run: |
+          raw="${GITHUB_REF_NAME:-manual}"
+          trimmed="${raw#v}"
+          trimmed="${trimmed#V}"
+          echo "version=v${trimmed}" >> "$GITHUB_OUTPUT"
+          echo "版本号：v${trimmed}"
+
+      - name: 安装 .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: 发布（自包含单文件）
+        run: >
+          dotnet publish BaiduPcsAPP/BaiduPcsAPP.csproj
+          -c Release -r ${{ matrix.rid }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish/${{ matrix.rid }}
+
+      - name: 打包（Windows）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "BaiduPcs-${{ steps.ver.outputs.version }}-${{ matrix.rid }}"
+          Compress-Archive -Path "publish/${{ matrix.rid }}/*" -DestinationPath "$name.zip"
+          Get-FileHash "$name.zip" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $name.zip" } |
+            Out-File "$name.zip.sha256" -Encoding utf8
+
+      - name: 打包（Linux / macOS）
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          name="BaiduPcs-${{ steps.ver.outputs.version }}-${{ matrix.rid }}"
+          chmod +x "publish/${{ matrix.rid }}/BaiduPcsAPP" 2>/dev/null || true
+          (cd "publish/${{ matrix.rid }}" && zip -r "../../$name.zip" .)
+          (cd . && sha256sum "$name.zip" > "$name.zip.sha256")
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaiduPcs-${{ steps.ver.outputs.version }}-${{ matrix.rid }}
+          path: |
+            BaiduPcs-${{ steps.ver.outputs.version }}-${{ matrix.rid }}.zip
+            BaiduPcs-${{ steps.ver.outputs.version }}-${{ matrix.rid }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 30

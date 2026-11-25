@@ -390,7 +390,8 @@ public sealed class Uploader : IDisposable, ITransferEngine
         var name = _options.FileName ?? Path.GetFileName(_options.LocalFilePath);
         var target = PcsPath.Join(_options.RemoteDir, name);
 
-        for (var n = 2; ; n++)
+        // 上限 1000：目标目录已有大量同名文件时，避免无限次 meta 请求把任务卡死
+        for (var n = 2; n <= 1000; n++)
         {
             if (!await ExistsAsync(target, ct).ConfigureAwait(false))
             {
@@ -399,22 +400,30 @@ public sealed class Uploader : IDisposable, ITransferEngine
 
             var ext = Path.GetExtension(name);
             var stem = Path.GetFileNameWithoutExtension(name);
+            if (string.IsNullOrEmpty(stem))
+            {
+                // dotfile（如 .gitignore）：GetFileNameWithoutExtension 返回空，退化为整名加序号
+                stem = name;
+                ext = string.Empty;
+            }
+
             target = PcsPath.Join(_options.RemoteDir, $"{stem}{n}{ext}");
         }
+
+        throw new UploadException(
+            $"目标目录同名文件超过上限（1000 个），请先整理远端目录：{_options.RemoteDir}",
+            UploadErrorKind.Fatal);
     }
 
-    /// <summary>探测远端路径是否存在；探测失败按不存在处理（不阻塞上传，rtype=3 兜底覆盖）。</summary>
+    /// <summary>
+    /// 探测远端路径是否存在。
+    /// **探测失败不能当作「不存在」**——否则随后会用覆盖语义（<c>rtype=3</c>）上传，
+    /// 把远端同名文件静默覆盖掉。这里让异常上抛，由任务层展示真实原因，用户重试即可。
+    /// </summary>
     private async Task<bool> ExistsAsync(string path, CancellationToken ct)
     {
-        try
-        {
-            var metas = await _options.Api.GetMetaAsync(new[] { path }, ct).ConfigureAwait(false);
-            return metas.Count > 0;
-        }
-        catch (BaiduApiException)
-        {
-            return false;
-        }
+        var metas = await _options.Api.GetMetaAsync(new[] { path }, ct).ConfigureAwait(false);
+        return metas.Count > 0;
     }
 
     private async Task<long> GetUkAsync(CancellationToken ct)

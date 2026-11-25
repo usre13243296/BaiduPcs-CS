@@ -42,7 +42,7 @@
 1. **第三方接口风险**：客户端调用百度网盘面向 Web / 官方客户端的私有接口，接口可能随时变更；账号存在被风控（限速、验证、封禁）的可能。
 2. **未签名发布包**：Release 中的可执行文件没有代码签名证书，Windows SmartScreen 与 macOS Gatekeeper 会提示。请只从本仓库的 Releases 页面下载，并核对文件大小。
 3. **依赖供应链**：`BaiduPcs.Core` 零第三方运行时依赖；`BaiduPcsAPP` 仅依赖 Avalonia 与 CommunityToolkit.Mvvm 官方包，版本固定在 `csproj` 中（版本清单见 [docs/FACTS.md](docs/FACTS.md) §二）。
-4. **TLS 证书校验默认关闭（v0.6.0 现状）**：`BaiduHttpClient` 的 `BypassSslValidation` 默认 `true`，会跳过 HTTPS 证书校验，存在中间人风险（公共 Wi-Fi、恶意代理可冒充 `*.baidu.com` 并截获 BDUSS）。**v0.6.1 计划改为默认开启**、仅在设置中显式 opt-in 才关闭；在此之前请避免在不可信网络下登录。状态跟踪见 [docs/FACTS.md](docs/FACTS.md) §八。
+4. ~~**TLS 证书校验默认关闭**~~ **已于 v0.6.1 修复**：`BaiduHttpClient.BypassSslValidation` 现在默认 `false`（开启证书校验），仅在调用方显式 opt-in 时才关闭——该开关只用于企业代理自签证书等特殊场景。若需关闭，请确认你知道这会把 BDUSS 暴露给链路上的任何人。历史版本（≤ v0.6.0）请勿在不可信网络下使用。
 
 ## 不在安全范围内
 

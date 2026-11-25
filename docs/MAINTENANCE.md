@@ -85,11 +85,18 @@ dotnet publish BaiduPcsAPP/BaiduPcsAPP.csproj -c Release -r win-x64 `
 3. `CHANGELOG.md`：把 `[Unreleased]` 的内容提为 `## [x.y.z] - YYYY-MM-DD`，并补上比较链接；
 4. `docs/FACTS.md` §一「当前版本」同步（脚本会校验这两处一致）；
 5. `README.md` 的「当前版本」行与 `llms.txt` 同步；
-6. 提交 `chore(release): vX.Y.Z`，打 tag `vX.Y.Z` 并推送（`mirror-to-gitee` 会自动同步到镜像仓库）；
-7. 按 6 个 RID 发布，产物命名 `BaiduPcs-vX.Y.Z-<rid>.zip`；
-8. 写 GitHub Release notes（可从 CHANGELOG 对应段落复制），附 SHA256。
+6. 提交 `chore(release): vX.Y.Z`，打 tag（**推荐小写 `v`**）并推送：
 
-> 现有状态：发布是**手工**执行；tag 触发自动发布已列入 [CODE_REVIEW](CODE_REVIEW_2026-11-25.md) 阶段 4。
+   ```bash
+   git tag v0.6.1
+   git push origin v0.6.1
+   ```
+
+   推送 tag 会触发两条流水线：`release`（按 6 个 RID 出包，产物为 `BaiduPcs-vX.Y.Z-<rid>.zip` + 同名 `.sha256`）与 `mirror-to-gitee`（同步镜像仓库）；
+7. 到 Actions 页面下载这 6 个 artifact，至少验证 Windows x64 包能启动后，再新建 GitHub Release 并把 zip 与 sha256 一起挂上；Release notes 从 CHANGELOG 对应段落复制；
+8. 首次跑 `release` 时留意矩阵日志：跨平台交叉发布（`win-arm64`、`osx-x64` 等）若某 RID 报错，可在对应平台单独 `dotnet publish` 兜底。
+
+> 现有状态：`release.yml` 自动出包，但**不自动创建 Release**——对外发布保留人工确认环节。
 
 ### 版本备份（每个小版本）
 

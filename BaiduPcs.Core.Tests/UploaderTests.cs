@@ -603,4 +603,43 @@ public class UploaderTests : IDisposable
         Assert.Empty(_server.ByPath("/rest/2.0/pcs/superfile2"));
         Assert.Single(_server.ByPath("/api/create"));
     }
+
+    [Fact]
+    public async Task UploadAsync_MetaProbeFails_FailsInsteadOfOverwritingRemote()
+    {
+        // 重名探测失败（如登录态过期）时**不能**假设「目标不存在」：
+        // 否则随后会以 rtype=3（覆盖语义）上传，把远端同名文件静默覆盖掉。
+        var file = MakeFile(1024);
+        _server.MetaResponder = () => """{"error_code":-6,"error_msg":"请重新登录"}""";
+
+        var ex = await Assert.ThrowsAsync<BaiduApiException>(
+            () => CreateUploader(file, fileName: "report.txt").UploadAsync());
+
+        Assert.Equal(-6, ex.RemoteCode);
+        Assert.Empty(_server.ByPath("/api/precreate"));
+        Assert.Empty(_server.ByPath("/api/create"));
+        Assert.Empty(_server.ByPath("/rest/2.0/pcs/superfile2"));
+    }
+
+    [Fact]
+    public async Task UploadAsync_DotFileConflict_AppendsSuffixAfterWholeName()
+    {
+        // dotfile（.gitignore）的 GetFileNameWithoutExtension 为空，旧实现会改名成 2.gitignore；
+        // 期望与普通文件一致：.gitignore → .gitignore2
+        var file = MakeFile(16);
+        var probeCalls = 0;
+        _server.MetaResponder = () =>
+        {
+            probeCalls++;
+            return probeCalls == 1
+                ? """{"error_code":0,"list":[{"path":"/dir/.gitignore","server_filename":".gitignore","size":1,"isdir":0}]}"""
+                : """{"error_code":0,"list":[]}""";
+        };
+        _server.PrecreateResponder = () => """{"errno":0,"return_type":2}""";
+
+        var uploader = CreateUploader(file, fileName: ".gitignore");
+        await uploader.UploadAsync();
+
+        Assert.Equal("/dir/.gitignore2", uploader.TargetPath);
+    }
 }

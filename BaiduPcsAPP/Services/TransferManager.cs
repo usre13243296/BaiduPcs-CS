@@ -140,15 +140,40 @@ public sealed class TransferManager
         }
     }
 
-    /// <summary>删除任务行（运行/暂停中先取消，磁盘文件由取消路径清理）。</summary>
+    /// <summary>删除任务行：任何状态都先「停住」，再移除行并释放去重键。</summary>
+    /// <remarks>
+    /// 排队中的任务必须显式置为 <see cref="TransferTaskState.Canceled"/>，否则它拿到槽位后
+    /// 仍会真正开始传输（<see cref="RunAsync"/> 只跳过 Canceled 状态）。
+    /// </remarks>
     public void Delete(TransferTaskViewModel task)
     {
         if (task.State is TransferTaskState.Running or TransferTaskState.Paused)
         {
             task.Cts?.Cancel();
         }
+        else if (task.State is TransferTaskState.Queued)
+        {
+            task.State = TransferTaskState.Canceled;
+        }
 
+        ReleaseDedupKey(task);
         _transfers.RemoveTask(task);
+    }
+
+    /// <summary>释放去重键（下载=远端路径，上传=本地文件路径）。重复调用无副作用。</summary>
+    private void ReleaseDedupKey(TransferTaskViewModel task)
+    {
+        lock (_lock)
+        {
+            if (task.IsUpload)
+            {
+                _activeUploads.Remove(task.LocalPath);
+            }
+            else
+            {
+                _activePaths.Remove(task.RemotePath);
+            }
+        }
     }
 
     private async Task RunAsync(TransferTaskViewModel task)
@@ -216,17 +241,7 @@ public sealed class TransferManager
             task.Cts?.Dispose();
             task.Cts = null;
             _slot.Release();
-            lock (_lock)
-            {
-                if (task.IsUpload)
-                {
-                    _activeUploads.Remove(task.LocalPath);
-                }
-                else
-                {
-                    _activePaths.Remove(task.RemotePath);
-                }
-            }
+            ReleaseDedupKey(task);
         }
     }
 
@@ -234,6 +249,7 @@ public sealed class TransferManager
     private async Task RunDownloadAsync(TransferTaskViewModel task, CancellationToken ct)
     {
         var urls = await _api.BuildDownloadUrlsAsync(task.RemotePath, ct).ConfigureAwait(false);
+        Directory.CreateDirectory(task.SaveDir);
         var partPath = Path.Combine(task.SaveDir, task.Name + ".part");
         var checkpointPath = partPath + ".json";
 
@@ -252,15 +268,12 @@ public sealed class TransferManager
 
         await engine.DownloadAsync(partPath, checkpointPath, progress, ct).ConfigureAwait(false);
 
-        // 完成：重命名 .part → 正式文件
-        var finalPath = Path.Combine(task.SaveDir, task.Name);
-        if (File.Exists(finalPath))
-        {
-            File.Delete(finalPath);
-        }
-
+        // 完成：重命名 .part → 正式文件。
+        // 目标已存在时自动递增（与上传的重名策略一致），不覆盖用户已有文件；
+        // File.Move 本身不覆盖，避免「先删后移」在失败时两边都没了。
+        var finalPath = ResolveLocalTargetPath(task.SaveDir, task.Name);
         File.Move(partPath, finalPath);
-        task.DetailText = finalPath;
+        SetTask(task, t => t.DetailText = finalPath);
     }
 
     /// <summary>上传分支：引擎秒传/分片/合并；会话（uploadid + 已传分片）跨重试复用。</summary>
@@ -288,7 +301,41 @@ public sealed class TransferManager
 
         // 完成：展示最终远端路径；秒传命中时明确标注（方便区分秒传与真实上传）
         var target = uploader.TargetPath ?? task.RemoteDir;
-        task.DetailText = uploader.WasRapidUpload ? $"秒传命中：{target}" : target;
+        var detail = uploader.WasRapidUpload ? $"秒传命中：{target}" : target;
+        SetTask(task, t => t.DetailText = detail);
+    }
+
+    /// <summary>
+    /// 解析本地最终文件名：目标已存在则自动递增 <c>名字2.ext</c>、<c>名字3.ext</c>…，
+    /// 与上传的重名策略保持一致。上限 1000，避免目录里同名文件过多时死循环。
+    /// </summary>
+    private static string ResolveLocalTargetPath(string dir, string name)
+    {
+        var target = Path.Combine(dir, name);
+        if (!File.Exists(target) && !Directory.Exists(target))
+        {
+            return target;
+        }
+
+        var ext = Path.GetExtension(name);
+        var stem = Path.GetFileNameWithoutExtension(name);
+        if (string.IsNullOrEmpty(stem))
+        {
+            // dotfile（如 .gitignore）：GetFileNameWithoutExtension 返回空，退化为整名加序号
+            stem = name;
+            ext = string.Empty;
+        }
+
+        for (var n = 2; n <= 1000; n++)
+        {
+            var candidate = Path.Combine(dir, $"{stem}{n}{ext}");
+            if (!File.Exists(candidate) && !Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new IOException($"目标目录同名文件过多，无法自动改名：{target}");
     }
 
     private static void CleanPartFiles(TransferTaskViewModel task)

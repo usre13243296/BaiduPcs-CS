@@ -67,11 +67,18 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(TopBarTitle));
     }
 
+    /// <summary>
+    /// 导航命令。不用 <c>RelayCommand&lt;int&gt;</c>：XAML 里的 <c>CommandParameter="0"</c> 是字符串，
+    /// 与 int 参数不匹配会导致「传输 / 设置」页点了没反应（v0.6.0 的已知缺陷）。
+    /// </summary>
     [RelayCommand]
-    private void NavigateTo(int index)
-    {
-        SelectedNavIndex = index;
-    }
+    private void ShowFiles() => SelectedNavIndex = 0;
+
+    [RelayCommand]
+    private void ShowTransfers() => SelectedNavIndex = 1;
+
+    [RelayCommand]
+    private void ShowSettings() => SelectedNavIndex = 2;
 
     [RelayCommand]
     private void Logout()

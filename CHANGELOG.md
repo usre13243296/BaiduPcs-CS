@@ -2,7 +2,21 @@
 
 本项目的所有重要变更都记录在此文件。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.6.1] - 2026-11-25
+
+稳定性修复版本：修掉 6 处「一点就废」的界面 / 传输缺陷与 1 个安全默认值，并建立文档与 CI 的防漂移机制。**不含新功能**。
+
+### 修复
+
+- **对话框按钮失灵**：`ConfirmDialog` / `InputDialog` 的「确定 / 取消」没有绑定 `Click`，导致新建文件夹、重命名、删除**全部无法完成**，所有错误提示也只能用标题栏关闭。已接线，并支持 Enter / Esc。
+- **侧边栏导航失效**：XAML 把字符串参数传给 `RelayCommand<int>`，「传输 / 设置」两页点不进去。改为三个无参命令。
+- **TLS 证书校验默认关闭**：`BaiduHttpClient.BypassSslValidation` 原默认 `true`，而每个请求都携带 BDUSS / STOKEN，可被中间人截获。改为默认 `false`，需显式 opt-in 才关闭（见 [SECURITY](SECURITY.md)）。
+- **删除「排队中」的任务后仍会下载**：`TransferManager.Delete` 只对运行 / 暂停任务取消，排队任务仅移除行，拿到槽位后照旧传输。现在任何状态都先停住，并立即释放去重键。
+- **上传重名探测失败即覆盖远端**：探测异常曾被当作「目标不存在」，随后以 `rtype=3` 覆盖同名文件。现在探测失败即任务失败并展示真实原因（`meta` 探测错误不再被吞掉）。
+- **下载静默覆盖本地同名文件**：改为自动递增 `名字2.ext`（与上传重名策略一致），并用 `File.Move` 原子改名代替「先删后移」。
+- 重名递增加 1000 上限，避免目录里同名文件过多时的无上限 `meta` 请求；dotfile（如 `.gitignore`）改名不再得到 `2.gitignore`。
+- 下载开始前创建保存目录；上传 / 下载的完成信息改走 UI 线程封送（原先在后台线程直接改绑定属性）。
+- 新增 2 条回归测试：探测失败不得继续上传、dotfile 重名递增。
 
 ### 修复
 
@@ -30,6 +44,8 @@
 
 - 新增 [`tools/check-docs.ps1`](tools/check-docs.ps1)：校验 ① `FACTS.md` / `README.md` / `llms.txt` 的版本号与 `csproj` 一致；② `FACTS.md` 的用例总数与 `[Fact]+[InlineData]` 实数一致；③ 全仓 markdown 相对链接有效；④ README / CONTRIBUTING / llms.txt 未写死用例数。兼容 PowerShell 5.1 与 7。
 - 新增 [`tools/backup-version.ps1`](tools/backup-version.ps1)：每个小版本在仓库外（`version-backups/`）留一份独立快照（源码 + `repo.bundle` + `BACKUP.md` 清单），约定见 [docs/MAINTENANCE.md](docs/MAINTENANCE.md) §四「版本备份」。
+- 新增 `.github/workflows/release.yml`：推送 `v*` tag 后按 6 个 RID 自动出包（zip + sha256）作为 workflow artifact，Release 仍由人工确认。
+- `App.axaml.cs` 的日志写入加锁并按 4 MB 滚动为 `app.1.log`：原先多线程并发 `AppendAllText` 会抛 `IOException` 被吞掉，最关键的异常行可能丢失。
 - `build.yml`：启用 NuGet 缓存；增加 Linux 观察性测试腿（`continue-on-error`，稳定后转强制）；增加文档一致性检查步骤。
 - `PULL_REQUEST_TEMPLATE.md`：自查清单增加「事实只改 FACTS」与「check-docs 通过」两项。
 
@@ -99,7 +115,8 @@
 
 - 59 个单元测试，含密码学算法对齐 Go 测试向量。
 
-[Unreleased]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.6...main
+[Unreleased]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.6.1...main
+[0.6.1]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.6...V0.6.1
 [0.6.0]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.5.9...V0.6
 [0.5.9]: https://github.com/usre13243296/BaiduPcs-CS/compare/v0.5.0...V0.5.9
 [0.5.0]: https://github.com/usre13243296/BaiduPcs-CS/releases/tag/v0.5.0

@@ -52,11 +52,11 @@
                         </StackPanel>
 
                         <Button Classes="nav" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Content="📁  文件" Command="{Binding NavigateToCommand}" CommandParameter="0" />
+                                Content="📁  文件" Command="{Binding ShowFilesCommand}" />
                         <Button Classes="nav" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Content="📥  传输" Command="{Binding NavigateToCommand}" CommandParameter="1" />
+                                Content="📥  传输" Command="{Binding ShowTransfersCommand}" />
                         <Button Classes="nav" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Content="⚙  设置" Command="{Binding NavigateToCommand}" CommandParameter="2" />
+                                Content="⚙  设置" Command="{Binding ShowSettingsCommand}" />
                     </StackPanel>
                 </DockPanel>
             </Border>

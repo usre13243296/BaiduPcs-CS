@@ -69,21 +69,61 @@ public partial class App : Application
             WriteLog("DispatcherUnhandledException", e.Exception?.ToString() ?? string.Empty);
     }
 
-    /// <summary>追加一行日志到本地文件。</summary>
+    /// <summary>单份日志上限：超过后滚动为 app.1.log，避免长期运行把配置目录写满。</summary>
+    private const long MaxLogBytes = 4 * 1024 * 1024;
+
+    /// <summary>日志写锁：多线程同时 AppendAllText 会抛 IOException，最关键的异常行反而会丢。</summary>
+    private static readonly object LogLock = new();
+
+    /// <summary>追加一行日志到本地文件（串行化 + 按大小滚动）。</summary>
     private static void WriteLog(string category, string message)
     {
         try
         {
-            var logDir = BaiduPcs.Core.Infrastructure.AppPaths.ConfigDir;
-            Directory.CreateDirectory(logDir);
-            var logFile = Path.Combine(logDir, "app.log");
             var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{category}] {message}{Environment.NewLine}";
-            File.AppendAllText(logFile, line);
+
+            lock (LogLock)
+            {
+                var logDir = BaiduPcs.Core.Infrastructure.AppPaths.ConfigDir;
+                Directory.CreateDirectory(logDir);
+                var logFile = Path.Combine(logDir, "app.log");
+                RollLogIfTooBig(logFile);
+                File.AppendAllText(logFile, line);
+            }
+
             Console.Error.WriteLine(line);
         }
         catch
         {
             // 日志写入失败时忽略，避免二次异常
+        }
+    }
+
+    /// <summary>app.log 超过上限时滚动为 app.1.log（只保留一份历史）。滚动失败不阻断写日志。</summary>
+    private static void RollLogIfTooBig(string logFile)
+    {
+        var info = new FileInfo(logFile);
+        if (!info.Exists || info.Length < MaxLogBytes)
+        {
+            return;
+        }
+
+        try
+        {
+            var backup = Path.Combine(info.DirectoryName!, "app.1.log");
+            if (File.Exists(backup))
+            {
+                File.Delete(backup);
+            }
+
+            File.Move(logFile, backup);
+        }
+        catch (IOException)
+        {
+            // 被占用等情况：继续向原文件追加，下次再试
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
