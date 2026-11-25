@@ -49,7 +49,7 @@
 - 新增 [`tools/backup-version.ps1`](tools/backup-version.ps1)：每个小版本在仓库外（`version-backups/`）留一份独立快照（源码 + `repo.bundle` + `BACKUP.md` 清单），约定见 [docs/MAINTENANCE.md](docs/MAINTENANCE.md) §四「版本备份」。
 - 新增 `.github/workflows/release.yml`：推送 `v*` tag 后按 6 个 RID 自动出包（zip + sha256）作为 workflow artifact，Release 仍由人工确认。
 - `App.axaml.cs` 的日志写入加锁并按 4 MB 滚动为 `app.1.log`：原先多线程并发 `AppendAllText` 会抛 `IOException` 被吞掉，最关键的异常行可能丢失。
-- `build.yml`：启用 NuGet 缓存；增加 Linux 观察性测试腿（`continue-on-error`，稳定后转强制）；增加文档一致性检查步骤。
+- `build.yml`：启用 NuGet 缓存；**Linux 测试腿升级为强制门槛**（首轮观察即全绿，run 45607232777）；增加文档一致性检查步骤。
 - `PULL_REQUEST_TEMPLATE.md`：自查清单增加「事实只改 FACTS」与「check-docs 通过」两项。
 
 ### 测试

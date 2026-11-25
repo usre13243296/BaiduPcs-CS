@@ -43,15 +43,12 @@ jobs:
       - name: 构建（Release）
         run: dotnet build BaiduPcs.slnx -c Release --no-restore
 
-      # Windows 为强制门槛：历史基线在该平台验证。
-      - name: 运行测试（强制）
+      # Windows / Linux 都是强制门槛：Linux 腿首轮观察即全绿（2026-11-25，run 45607232777），
+      # 引擎测试用的本地 HttpListener 在 ubuntu-latest 上正常工作。
+      - name: 运行测试
         if: runner.os == 'Windows'
         run: dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
 
-      # Linux 为观察性运行：引擎测试依赖本地 HttpListener 监听 127.0.0.1，
-      # 此前只在 Windows 验证过。先跑起来观察，稳定后删除 continue-on-error 改为强制门槛
-      # （见 docs/MAINTENANCE.md §七 债务 2）。
-      - name: 运行测试（观察性，不阻塞）
+      - name: 运行测试（Linux）
         if: runner.os == 'Linux'
-        continue-on-error: true
         run: dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"

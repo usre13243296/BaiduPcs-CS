@@ -157,7 +157,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\backup-version.ps1 `
 | # | 债务 | 影响 |
 |---|------|------|
 | 1 | 桌面层（`BaiduPcsAPP`）零测试 | 界面缺陷无法被 CI 发现，见 CODE_REVIEW T8 |
-| 2 | CI 测试门槛只在 Windows 强制；Linux 为观察性运行（`continue-on-error`） | 稳定后应删除该开关，把 Linux 变成强制门槛——这是拦住 `SpeedMeter` 类平台缺陷的唯一办法 |
+| 2 | ~~CI 测试门槛只在 Windows 强制~~ **已解决（2026-11-25）**：Linux 腿首轮观察全绿后已升级为强制门槛 | 双平台测试成为硬门槛，平台差异类缺陷（如 `SpeedMeter` tick）现在会被 CI 拦住 |
 | 3 | macOS 配置目录为推断值 | 见 FACTS §六「待实机确认」 |
 | 4 | 发布流程手工 | 6 个 RID 靠人肉打包，易漏 |
 | 5 | `DEVELOPMENT_LOG.md` 内仍有若干「当时」表述 | 已加定位声明与作废横幅，阅读时以 FACTS 为准 |

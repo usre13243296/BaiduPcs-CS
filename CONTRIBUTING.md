@@ -14,7 +14,7 @@
 |------|------|------|
 | .NET SDK | 10.0+ | 构建与测试的唯一必需项 |
 | Git | 任意近版本 | 提交 PR |
-| 操作系统 | Windows / Linux / macOS | 三平台均可开发；CI 在 Windows 与 Linux 上构建，测试在 Windows 上强制运行、Linux 上观察性运行（见 [docs/MAINTENANCE.md](docs/MAINTENANCE.md) §七） |
+| 操作系统 | Windows / Linux / macOS | 三平台均可开发；CI 在 Windows 与 Linux 上构建并跑测试（两者都是强制门槛） |
 
 ## 本地开发
 
