@@ -145,6 +145,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\backup-version.ps1 `
 | 为什么两个下载通道「主 + 降级」（与早期说法不同） | `DEVELOPMENT_LOG.md` §三-bis（§3.2 已作废） |
 | 断点续传为什么从「字节续传」改成「分片级」 | `DEVELOPMENT_LOG.md` §三-bis（§3.3 已作废） |
 | `Task.WhenAny` 不传播取消的坑 | `DEVELOPMENT_LOG.md` §三-bis 踩坑 1 |
+| 断点损坏为什么是「丢弃重下」而不是尽力续传 | `BaiduPcs.Core/Download/Downloader.cs` 的 `IsCheckpointUsable`（v0.6.2）与 CHANGELOG `[0.6.2]` |
+| 暂停/恢复为什么会挂死在 0 B/s | CHANGELOG `[0.6.2]`「暂停门控加固」（`AsyncManualResetEvent.Reset` 幂等） |
 | multipart 误发整文件的坑 | `DEVELOPMENT_LOG.md` §三-ter 踩坑 6 |
 | 上传进度/速度虚高的排查过程 | `DEVELOPMENT_LOG.md` §三-ter 踩坑 7 |
 | 下载引擎的完整方案与 Go 对照 | `DOWNLOAD_ENGINE_DESIGN.md` |

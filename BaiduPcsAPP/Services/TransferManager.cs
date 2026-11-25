@@ -36,12 +36,9 @@ public sealed class TransferManager
             return false;
         }
 
-        lock (_lock)
+        if (!TryReserveDedupKey(isUpload: false, remotePath))
         {
-            if (!_activePaths.Add(remotePath))
-            {
-                return false;
-            }
+            return false;
         }
 
         var task = new TransferTaskViewModel(name, this)
@@ -67,12 +64,9 @@ public sealed class TransferManager
             return false;
         }
 
-        lock (_lock)
+        if (!TryReserveDedupKey(isUpload: true, localPath))
         {
-            if (!_activeUploads.Add(localPath))
-            {
-                return false;
-            }
+            return false;
         }
 
         var task = new TransferTaskViewModel(name, this)
@@ -113,13 +107,11 @@ public sealed class TransferManager
         }
         else if (task.State == TransferTaskState.Failed)
         {
-            lock (_lock)
+            // 用与入队相同的去重键规则重试；原来对上传任务误用了 RemotePath（恒为空串），
+            // 第一次重试就把空串塞进 _activePaths 且永不释放，导致后续重试全部被静默挡掉。
+            if (!TryReserveDedupKey(task))
             {
-                if (!_activePaths.Add(task.RemotePath))
-                {
-                    // 同路径已有新任务在跑：放弃重试
-                    return;
-                }
+                return; // 同目标已有新任务在跑：放弃重试
             }
 
             task.State = TransferTaskState.Queued;
@@ -127,7 +119,7 @@ public sealed class TransferManager
         }
     }
 
-    /// <summary>取消：排队中直接置取消；运行/暂停中取消令牌（引擎清理 .part 与断点）。</summary>
+    /// <summary>取消：停止传输但**保留**断点（下载的 .part/.part.json 会留到下次续传）。</summary>
     public void Cancel(TransferTaskViewModel task)
     {
         if (task.State == TransferTaskState.Queued)
@@ -136,11 +128,12 @@ public sealed class TransferManager
         }
         else
         {
+            task.PurgeFilesOnCancel = false;
             task.Cts?.Cancel();
         }
     }
 
-    /// <summary>删除任务行：任何状态都先「停住」，再移除行并释放去重键。</summary>
+    /// <summary>删除任务行：先「停住」，再移除行并释放去重键；下载任务的临时文件一并清理。</summary>
     /// <remarks>
     /// 排队中的任务必须显式置为 <see cref="TransferTaskState.Canceled"/>，否则它拿到槽位后
     /// 仍会真正开始传输（<see cref="RunAsync"/> 只跳过 Canceled 状态）。
@@ -149,16 +142,35 @@ public sealed class TransferManager
     {
         if (task.State is TransferTaskState.Running or TransferTaskState.Paused)
         {
+            task.PurgeFilesOnCancel = true;
             task.Cts?.Cancel();
         }
         else if (task.State is TransferTaskState.Queued)
         {
             task.State = TransferTaskState.Canceled;
         }
+        else if (!task.IsUpload)
+        {
+            // 已结束（完成/失败/取消）：删行时把遗留的 .part / .part.json 一起清掉
+            CleanPartFiles(task);
+        }
 
         ReleaseDedupKey(task);
         _transfers.RemoveTask(task);
     }
+
+    /// <summary>占用去重键（下载=远端路径，上传=本地文件路径）；已被占用返回 false。</summary>
+    private bool TryReserveDedupKey(bool isUpload, string key)
+    {
+        lock (_lock)
+        {
+            return isUpload ? _activeUploads.Add(key) : _activePaths.Add(key);
+        }
+    }
+
+    /// <summary>占用任务自己的去重键。</summary>
+    private bool TryReserveDedupKey(TransferTaskViewModel task)
+        => TryReserveDedupKey(task.IsUpload, task.IsUpload ? task.LocalPath : task.RemotePath);
 
     /// <summary>释放去重键（下载=远端路径，上传=本地文件路径）。重复调用无副作用。</summary>
     private void ReleaseDedupKey(TransferTaskViewModel task)
@@ -215,8 +227,12 @@ public sealed class TransferManager
         }
         catch (OperationCanceledException)
         {
-            // 取消：下载清理 .part 与断点（对齐方案 5.7：取消即删除）；上传无本地文件，会话保留供续传
-            if (!task.IsUpload)
+            // 取消 vs 删除：
+            // - 点「取消」：**保留** .part 与 .part.json（数据安全优先，误点取消不再白下），
+            //   下次对同一文件再下载会自动续传；
+            // - 点「删除」：PurgeFilesOnCancel = true，才把临时文件清掉。
+            // 上传没有本地临时文件，会话（uploadid + 已传分片）始终保留供续传。
+            if (!task.IsUpload && task.PurgeFilesOnCancel)
             {
                 CleanPartFiles(task);
             }

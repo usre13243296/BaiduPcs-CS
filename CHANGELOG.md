@@ -2,6 +2,23 @@
 
 本项目的所有重要变更都记录在此文件。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.2] - 2026-11-25
+
+**数据安全版本**：把「取消/异常中断会丢进度」「坏断点会写出损坏文件」这两类会伤数据的行为修掉，并让失败任务能真正反复重试。
+
+### 修复
+
+- **取消下载不再丢弃进度**：点「取消」只停止传输、**保留** `.part` 与 `.part.json`，下次对同一文件再下载自动续传；只有点「删除」才清理临时文件（此前误点取消等于白下几小时）。
+- **坏断点自愈**：恢复前校验断点（区间是否越界、`.part` 是否还在、声称已下完时长度是否吻合）。不可用则丢弃断点、截断 `.part` 从头下载——这类断点续传会让文件出现空洞，而长度校验查不出来（偏移写会补零），最终表现为「下载成功但文件损坏」。
+- **上传任务失败后可反复重试**：`ResumeAsync` 原来对上传任务误用远端路径做去重键（恒为空串），第一次重试就把空串占住且永不释放，后续「继续」全部被静默挡掉。
+- **暂停门控加固**：`AsyncManualResetEvent.Reset()` 改为幂等（只有已放行时才换新门）。旧实现无条件替换，连续两次暂停（或暂停与 worker 竞争）会把等待者遗弃在旧门上，任务卡在「进行中 / 0 B/s」；监控循环每 500ms 一次 `Reset` 也会不断遗弃 `NeedWork` 的等待者。
+- 新增 10 条回归测试：坏断点三型自愈 + 合法断点仍走续传（对照）+ 门控 6 条（重复 Reset、多等待者、取消传播等）。
+
+### 文档
+
+- README / FAQ / FACTS / 路线图同步新语义；「已知问题」移除已修 3 条，标注 v0.6.2 修复项。
+- `docs/MAINTENANCE.md` 坑索引补充「为什么坏断点要重下」。
+
 ## [0.6.1] - 2026-11-25
 
 稳定性修复版本：修掉 6 处「一点就废」的界面 / 传输缺陷与 1 个安全默认值，并建立文档与 CI 的防漂移机制。**不含新功能**。
@@ -118,8 +135,9 @@
 
 - 59 个单元测试，含密码学算法对齐 Go 测试向量。
 
-[Unreleased]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.6.1...main
-[0.6.1]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.6...V0.6.1
+[Unreleased]: https://github.com/usre13243296/BaiduPcs-CS/compare/v0.6.2...main
+[0.6.2]: https://github.com/usre13243296/BaiduPcs-CS/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.6...v0.6.1
 [0.6.0]: https://github.com/usre13243296/BaiduPcs-CS/compare/V0.5.9...V0.6
 [0.5.9]: https://github.com/usre13243296/BaiduPcs-CS/compare/v0.5.0...V0.5.9
 [0.5.0]: https://github.com/usre13243296/BaiduPcs-CS/releases/tag/v0.5.0

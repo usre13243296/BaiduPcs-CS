@@ -46,6 +46,12 @@ public partial class TransferTaskViewModel : ViewModelBase
     /// <summary>取消令牌（由 TransferManager 管理）。</summary>
     internal CancellationTokenSource? Cts { get; set; }
 
+    /// <summary>
+    /// 取消时是否清理临时文件。点「取消」保持 false（保留 .part/.part.json 供续传），
+    /// 点「删除任务」时置 true。由 <see cref="Services.TransferManager"/> 维护。
+    /// </summary>
+    internal bool PurgeFilesOnCancel { get; set; }
+
     /// <summary>远程路径与保存目录（下载任务：失败重试/完成重命名用）。</summary>
     internal string RemotePath { get; set; } = string.Empty;
 

@@ -141,6 +141,15 @@ public sealed class Downloader : IDisposable, ITransferEngine
         CancellationToken ct)
     {
         var checkpoint = DownloadCheckpoint.TryLoad(checkpointPath);
+        if (checkpoint is not null && !IsCheckpointUsable(checkpoint, partPath))
+        {
+            // 断点与磁盘数据不一致（区间越界 / 数据文件缺失 / 声称已下完但长度不符）：
+            // 丢弃断点、从零重下。保留这种断点会让 .part 出现空洞，而长度校验查不出来
+            // （偏移写会补零），最终表现为「下载成功但文件损坏」。
+            checkpoint = null;
+            TryDeleteFile(checkpointPath);
+        }
+
         long totalSize;
         HttpResponseMessage? probe = null;
         var singleStream = false;
@@ -189,8 +198,10 @@ public sealed class Downloader : IDisposable, ITransferEngine
         var workers = new List<ChunkWorker>();
         var completedOk = false;
 
-        // .part 以偏移写打开（FileShare.Read 允许外部读取进度）
-        using (var file = File.OpenHandle(partPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read))
+        // .part 以偏移写打开（FileShare.Read 允许外部读取进度）。
+        // 没有可用断点 = 全新下载：用 Create 截断旧 .part，避免残留尾部让长度校验变成假象。
+        var openMode = checkpoint is null ? FileMode.Create : FileMode.OpenOrCreate;
+        using (var file = File.OpenHandle(partPath, openMode, FileAccess.Write, FileShare.Read))
         {
             _ctx.File = file;
             _ctx.TotalSize = totalSize;
@@ -455,8 +466,7 @@ public sealed class Downloader : IDisposable, ITransferEngine
     }
 
     /// <summary>从响应头取文件总大小：x-bs-file-size 优先，其次 Content-Range。</summary>
-    private static long GetTotalSize(HttpResponseMessage response)
-    {
+    private static long GetTotalSize(HttpResponseMessage response)    {
         if (response.Headers.TryGetValues("x-bs-file-size", out var values)
             && long.TryParse(values.FirstOrDefault(), out var size)
             && size > 0)
@@ -470,6 +480,57 @@ public sealed class Downloader : IDisposable, ITransferEngine
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// 断点是否可用于续传。不可用意味着「按它续传会写出带空洞的文件」，
+    /// 只能丢弃断点从零重下（长度校验对此无效，因为偏移写会把空洞补成零）。
+    /// </summary>
+    private static bool IsCheckpointUsable(DownloadCheckpoint checkpoint, string partPath)
+    {
+        if (checkpoint.TotalSize <= 0 || checkpoint.BlockSize <= 0)
+        {
+            return false;
+        }
+
+        if (checkpoint.GenBegin < 0 || checkpoint.GenBegin > checkpoint.TotalSize)
+        {
+            return false;
+        }
+
+        foreach (var range in checkpoint.Ranges)
+        {
+            if (range.Begin < 0 || range.Length <= 0 || range.End > checkpoint.TotalSize)
+            {
+                return false;
+            }
+        }
+
+        if (!File.Exists(partPath))
+        {
+            return false; // 断点在、数据文件不见了：无从续传
+        }
+
+        // 没有任何剩余分片 = 声称已下完，则数据文件长度必须吻合；否则说明上次写完但长度不对
+        return checkpoint.Ranges.Count > 0 || new FileInfo(partPath).Length == checkpoint.TotalSize;
+    }
+
+    /// <summary>尽力删除（断点自愈用，失败不影响继续下载）。</summary>
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     // ======================== 单线程降级 ========================

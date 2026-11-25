@@ -377,4 +377,107 @@ public class DownloaderTests : IDisposable
             Assert.Equal(100, last.Percent);
         }
     }
+
+    // ======================== 断点自愈（v0.6.2）========================
+    // 损坏的断点会让恢复后的文件出现空洞，而长度校验查不出来（偏移写补零），
+    // 因此引擎必须能识别「不可用断点」并丢弃它从零重下。
+
+    [Fact]
+    public async Task Download_CheckpointRangesOutOfRange_RestartsFromScratch()
+    {
+        var content = MakeContent(600 * 1024); // 256KB 分片 → 3 块
+        _server.AddFile("/badcp.bin", content);
+        var part = PartPath("badcp");
+        var cp = CheckpointPath("badcp");
+
+        // 造一个区间越界的断点 + 一个长度对不上的 .part
+        new DownloadCheckpoint
+        {
+            TotalSize = content.Length,
+            BlockSize = 256 * 1024,
+            GenBegin = content.Length,
+            Ranges = new List<DownloadRange> { new(10, content.Length + 4096) },
+        }.Save(cp);
+        File.WriteAllBytes(part, new byte[1024]);
+
+        using var dl = CreateDownloader("/badcp.bin");
+        await dl.DownloadAsync(part, cp);
+
+        Assert.Equal(content, File.ReadAllBytes(part));
+        Assert.False(File.Exists(cp), "完成后应删除断点");
+    }
+
+    [Fact]
+    public async Task Download_CheckpointWithoutPartFile_RestartsFromScratch()
+    {
+        var content = MakeContent(600 * 1024);
+        _server.AddFile("/nopart.bin", content);
+        var part = PartPath("nopart");
+        var cp = CheckpointPath("nopart");
+
+        // 断点在、数据文件被删：无法续传
+        new DownloadCheckpoint
+        {
+            TotalSize = content.Length,
+            BlockSize = 256 * 1024,
+            GenBegin = content.Length,
+            Ranges = new List<DownloadRange> { new(0, content.Length) },
+        }.Save(cp);
+
+        using var dl = CreateDownloader("/nopart.bin");
+        await dl.DownloadAsync(part, cp);
+
+        Assert.Equal(content, File.ReadAllBytes(part));
+    }
+
+    [Fact]
+    public async Task Download_CheckpointClaimsDoneButFileShort_RestartsFromScratch()
+    {
+        var content = MakeContent(600 * 1024);
+        _server.AddFile("/short.bin", content);
+        var part = PartPath("short");
+        var cp = CheckpointPath("short");
+
+        // 断点声称全部下完（无剩余分片），但 .part 只有 100 字节 —— 上次「写完但长度不对」
+        new DownloadCheckpoint
+        {
+            TotalSize = content.Length,
+            BlockSize = 256 * 1024,
+            GenBegin = content.Length,
+            Ranges = new List<DownloadRange>(),
+        }.Save(cp);
+        File.WriteAllBytes(part, new byte[100]);
+
+        using var dl = CreateDownloader("/short.bin");
+        await dl.DownloadAsync(part, cp);
+
+        Assert.Equal(content, File.ReadAllBytes(part));
+    }
+
+    [Fact]
+    public async Task Download_ValidCheckpoint_StillResumes()
+    {
+        // 对照实验：合法断点必须继续走续传，而不是被自愈逻辑误判成「损坏」而重下
+        var content = MakeContent(1024 * 1024); // 4 块
+        _server.AddFile("/valid.bin", content);
+        var part = PartPath("valid");
+        var cp = CheckpointPath("valid");
+
+        // 前 2 块已落盘，剩余 [512KB, 1MB)
+        File.WriteAllBytes(part, content[..(512 * 1024)]);
+        new DownloadCheckpoint
+        {
+            TotalSize = content.Length,
+            BlockSize = 256 * 1024,
+            GenBegin = 512 * 1024,
+            Ranges = new List<DownloadRange> { new(512 * 1024, content.Length) },
+        }.Save(cp);
+
+        using var dl = CreateDownloader("/valid.bin");
+        await dl.DownloadAsync(part, cp);
+
+        Assert.Equal(content, File.ReadAllBytes(part));
+        // 续传只需取后半段：请求的 Range 不应从 0 开始
+        Assert.DoesNotContain(_server.Requests, r => r.Range is not null && r.Range.StartsWith("bytes=0-"));
+    }
 }
