@@ -14,7 +14,7 @@
 |------|------|------|
 | .NET SDK | 10.0+ | 构建与测试的唯一必需项 |
 | Git | 任意近版本 | 提交 PR |
-| 操作系统 | Windows / Linux / macOS | 三平台均可开发；本仓库的测试在 Windows CI 上运行 |
+| 操作系统 | Windows / Linux / macOS | 三平台均可开发；CI 在 Windows 与 Linux 上构建，测试在 Windows 上强制运行、Linux 上观察性运行（见 [docs/MAINTENANCE.md](docs/MAINTENANCE.md) §七） |
 
 ## 本地开发
 
@@ -24,8 +24,12 @@ cd BaiduPcs-CS
 
 dotnet restore BaiduPcs.slnx          # 还原依赖
 dotnet build BaiduPcs.slnx            # 构建全部项目
-dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj   # 164 个用例，约 16 秒
+dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj   # 全量测试（基线见 docs/FACTS.md）
 dotnet run --project BaiduPcsAPP/BaiduPcsAPP.csproj          # 启动桌面端
+
+# 文档一致性检查（改了文档 / 版本号 / 测试后跑一次）
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\check-docs.ps1   # Windows
+pwsh -NoProfile -File tools/check-docs.ps1                                 # Linux / macOS
 ```
 
 调试 GUI 时可以用 `BP_SMOKE_TEST=1` 环境变量启动：程序会在 3 秒后自动退出，用来验证初始化不崩溃。
@@ -61,9 +65,13 @@ chore(ci): 升级 setup-dotnet
 
 1. Fork 仓库并从 `main` 切出特性分支：`git checkout -b feat/xxx`。
 2. 完成改动，本地 `dotnet build` + `dotnet test` 全绿。
-3. 如涉及用户可见行为，同步更新 `README.md` 与 `CHANGELOG.md`（`[Unreleased]` 段）。
-4. 提交 PR，填写 PR 模板中的自查清单；说明「改了什么、为什么改、怎么验证」。
-5. CI 通过后由维护者评审合并。
+3. **同步文档**（详见 [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md) §二）：
+   - 数字（版本、测试用例数、并发 / 分片参数、数据目录）**只改 [`docs/FACTS.md`](docs/FACTS.md)**，不要在 README / 本文里复述；
+   - 用户可见行为变化 → 更新 `README.md` 与 `CHANGELOG.md` 的 `[Unreleased]` 段；
+   - 解决新坑或做出架构取舍 → 在 `docs/DEVELOPMENT_LOG.md` 追加一节（带日期）。
+4. 跑一次文档检查：`tools/check-docs.ps1`（命令见上），全绿再提交。
+5. 提交 PR，填写 PR 模板中的自查清单；说明「改了什么、为什么改、怎么验证」。
+6. CI 通过后由维护者评审合并。
 
 ## 不要提交的文件
 

@@ -23,15 +23,17 @@
 | 下载 / 上传临时数据 | 下载目录 `*.part`、`*.part.json` | 文件内容与分片进度 |
 | 运行日志 `app.log` | 配置目录 | 异常堆栈、远端路径、错误码 |
 
-配置目录位置：
+配置目录位置（以 [docs/FACTS.md](docs/FACTS.md) §六 为准）：
 
 - Windows：`%APPDATA%\BaiduPcsApp`
-- Linux：`~/.config/BaiduPcsApp`
-- macOS：`~/Library/Application Support/BaiduPcsApp`
+- Linux / macOS：`~/.config/BaiduPcsApp`
+
+> macOS 同样落到 `~/.config`：客户端只调用 .NET 的 `SpecialFolder.ApplicationData`，没有平台分支（**待 Mac 实机确认**）。
 
 **重要**：
 
 - `accounts.json` 以明文保存 BDUSS，**不要**把它提交到仓库、上传网盘或发给他人；公共电脑上使用后请退出登录并删除该文件。
+- 该文件**未做额外权限加固**（`AccountStore.Save` 只做原子写入，未设置 0600 或使用系统密钥库）。Linux / macOS 上它通常继承 umask 得到 `0644`，同一台机器上的其它本地用户可读；介意的话自行 `chmod 600 ~/.config/BaiduPcsApp/accounts.json`。加密存储（DPAPI / Keychain / libsecret）在路线图中。
 - 提 Issue 时请先清理日志中的 BDUSS、Cookie、UID 与文件名。
 - 本项目**没有**任何遥测、上报或中间服务器：所有请求直连 `*.baidu.com`，账号数据不出本机。
 
@@ -39,7 +41,8 @@
 
 1. **第三方接口风险**：客户端调用百度网盘面向 Web / 官方客户端的私有接口，接口可能随时变更；账号存在被风控（限速、验证、封禁）的可能。
 2. **未签名发布包**：Release 中的可执行文件没有代码签名证书，Windows SmartScreen 与 macOS Gatekeeper 会提示。请只从本仓库的 Releases 页面下载，并核对文件大小。
-3. **依赖供应链**：`BaiduPcs.Core` 零第三方运行时依赖；`BaiduPcsAPP` 仅依赖 Avalonia 与 CommunityToolkit.Mvvm 官方包，版本固定在 `csproj` 中。
+3. **依赖供应链**：`BaiduPcs.Core` 零第三方运行时依赖；`BaiduPcsAPP` 仅依赖 Avalonia 与 CommunityToolkit.Mvvm 官方包，版本固定在 `csproj` 中（版本清单见 [docs/FACTS.md](docs/FACTS.md) §二）。
+4. **TLS 证书校验默认关闭（v0.6.0 现状）**：`BaiduHttpClient` 的 `BypassSslValidation` 默认 `true`，会跳过 HTTPS 证书校验，存在中间人风险（公共 Wi-Fi、恶意代理可冒充 `*.baidu.com` 并截获 BDUSS）。**v0.6.1 计划改为默认开启**、仅在设置中显式 opt-in 才关闭；在此之前请避免在不可信网络下登录。状态跟踪见 [docs/FACTS.md](docs/FACTS.md) §八。
 
 ## 不在安全范围内
 

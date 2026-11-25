@@ -8,11 +8,10 @@
   <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white">
   <img alt="Avalonia 12.1" src="https://img.shields.io/badge/Avalonia-12.1-8B44AC?style=flat-square">
   <img alt="平台" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square">
-  <img alt="测试" src="https://img.shields.io/badge/tests-164%20passing-brightgreen?style=flat-square">
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square">
 </p>
 
-**BaiduPcs-CS** 是一个用 **C# / .NET 10 + Avalonia** 从零重写的**百度网盘桌面客户端**：参考 MIT 开源的 [BaiduPCS-Go](https://github.com/qjfoidnh/BaiduPCS-Go) 的协议实现，把 BDUSS 登录、文件浏览、多线程分片下载、断点续传、秒传上传、传输队列做成可用的跨平台图形界面，发布包覆盖 **Windows / Linux / macOS，以及 NAS、软路由这类 ARM 设备**。
+**BaiduPcs-CS** 是一个用 **C# / .NET 10 + Avalonia** 从零重写的**百度网盘桌面客户端**：参考 MIT 开源的 [BaiduPCS-Go](https://github.com/qjfoidnh/BaiduPCS-Go) 的协议实现，把 BDUSS 登录、文件浏览、多线程分片下载、断点续传、秒传上传、传输队列做成跨平台图形界面（**当前版本的已知问题见文末**），发布包覆盖 **Windows / Linux / macOS，以及 NAS、软路由这类 ARM 设备**。
 
 协议内核 `BaiduPcs.Core` 与 UI 完全解耦、零 Avalonia 依赖，同一份核心代码可以接 Avalonia 桌面、MAUI 移动端或 Web 管理界面——这是本项目与 `BaiduPCS-Go`（命令行）和官方客户端（闭源）最本质的区别。
 
@@ -32,8 +31,8 @@
 | 支持平台 | Windows、Linux、macOS（x64 / arm64 单文件免安装） |
 | 当前版本 | v0.6.0（下载 + 上传主链路可用） |
 | 协议参考 | [BaiduPCS-Go](https://github.com/qjfoidnh/BaiduPCS-Go)（Go，MIT） |
-| 代码规模 | 3 个项目、约 330 KB 源码、164 个单元/集成测试 |
 | 许可证 | MIT |
+| 事实与参数 | [docs/FACTS.md](docs/FACTS.md) —— 版本、测试基线、并发 / 分片、数据目录的**唯一来源** |
 
 ## 目录
 
@@ -47,6 +46,7 @@
 - [常见问题 FAQ](#常见问题-faq)
 - [开发与测试](#开发与测试)
 - [路线图](#路线图)
+- [已知问题](#已知问题)
 - [参与贡献](#参与贡献)
 - [许可证](#许可证)
 - [免责声明](#免责声明)
@@ -59,7 +59,7 @@
 
 - **BDUSS 登录**：粘贴浏览器里的 `BDUSS` 即可登录；高级模式可附加完整 Cookie 串，适配风控较严的账号。
 - **Cookie 初始化与持久化**：先访问网盘首页收集服务器下发的 `BAIDUID` 等 Cookie，再调 `getinfo` 验证，避免裸 BDUSS 被风控拒绝；运行期吸收的 Cookie 会合并回账号并落盘。
-- **多账号本地保存**：账号信息持久化到本地 `accounts.json`，重启自动恢复登录态，退出登录可切换账号。
+- **多账号本地保存**：账号信息持久化到本地 `accounts.json`，重启自动恢复登录态；切换账号需退出登录后重新粘贴 BDUSS（账号选择器在路线图中）。
 
 ### 文件管理
 
@@ -71,8 +71,8 @@
 
 - **多线程分片**：统一 8 并发 + `WriteAt` 绝对偏移写入 `.part`，无合并步骤。
 - **双下载通道**：「下载」以 locatedownload 签名直链为主通道（多备选链接逐个尝试），失败自动降级官方 `method=download` 通道；「复制链接」单独输出签名直链，可分享或用其他下载器接手。
-- **断点续传**：`.part` 数据文件 + `.part.json` 断点元数据（记录每个分片剩余范围），中断 / 取消后对同一文件重新下载即可续传。
-- **自动容错**：403/404/416 判死换直链；429/509 限流指数退避重连；断流 30 秒读超时重连；单分片连续失败升级为致命错误并展示原因。
+- **断点续传**：`.part` 数据文件 + `.part.json` 断点元数据（记录每个分片剩余范围）。**暂停**、异常退出或任务失败后，对同一文件重新下载即可续传；**取消**会丢弃已下载进度（v0.6.0 现状，见文末「已知问题」）。
+- **自动容错**：403/404/416 判死换直链；429/509 限流退避（1/2/4 秒封顶）；断流 30 秒读超时重连；单分片连续失败升级为致命错误并展示原因。
 - **进度与速度**：500ms 心跳刷新，周期采样速度模型，避免瞬时速度虚高。
 
 ### 上传
@@ -87,15 +87,15 @@
 ### 传输任务管理
 
 - 队列调度，同时传输 2 个任务；同远程路径 / 同本地文件自动去重。
-- 暂停、恢复、取消、删除；失败任务可继续（重试）。
+- 暂停、恢复、取消、删除；失败任务可继续重试（上传任务仅第一次重试有效，见文末「已知问题」）。
 - 底部传输停靠栏实时展示进度、速度、状态与可读的中文错误详情。
 
 ### 界面与工程化
 
 - **淡灰蓝浅色主题**：低光不刺眼，长时间使用舒适。
 - **跨平台单文件发布**：6 个 RID 发布包，解压即用（Windows）。
-- **164 个单元 / 集成测试**：密码学、协议层、下载引擎、上传引擎四层覆盖，不依赖任何 UI 框架。
-- **全局异常兜底**：未处理异常写入本地日志，不静默崩溃。
+- **单元 / 集成测试**：密码学、协议层、下载引擎、上传引擎四层覆盖，不依赖任何 UI 框架；用例数与耗时基线见 [docs/FACTS.md](docs/FACTS.md)（桌面层目前无自动化测试）。
+- **异常日志**：未处理异常写入配置目录的 `app.log`，便于定位问题（进程仍可能退出，见文末「已知问题」）。
 
 ## 快速开始
 
@@ -152,7 +152,7 @@ dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj
 
 1. 在文件列表中选中目标文件（文件夹暂不支持递归下载）。
 2. 点击工具栏「下载」，任务进入底部传输面板排队。
-3. 下载中可「暂停 / 继续 / 取消」；中断后对同一文件再次下载会自动读取 `.part.json` 续传。
+3. 下载中可「暂停 / 继续 / 取消」。暂停或异常退出后，对同一文件再次下载会自动读取 `.part.json` 续传；**取消会删除 `.part` 与断点**（v0.6.0 现状，想保进度请用「暂停」）。
 
 **两个按钮的区别**
 
@@ -176,11 +176,13 @@ dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj
 
 ### 数据存放位置
 
-| 内容 | Windows | Linux | macOS |
-|------|---------|-------|-------|
-| 账号配置 `accounts.json` | `%APPDATA%\BaiduPcsApp` | `~/.config/BaiduPcsApp` | `~/Library/Application Support/BaiduPcsApp` |
-| 异常日志 `app.log` | 同上 | 同上 | 同上 |
-| 默认下载目录 | `%USERPROFILE%\Downloads\BaiduPcs` | `~/Downloads/BaiduPcs` | `~/Downloads/BaiduPcs` |
+| 内容 | Windows | Linux / macOS |
+|------|---------|---------------|
+| 账号配置 `accounts.json` | `%APPDATA%\BaiduPcsApp` | `~/.config/BaiduPcsApp` |
+| 异常日志 `app.log` | 同上 | 同上 |
+| 默认下载目录 | `%USERPROFILE%\Downloads\BaiduPcs` | `~/Downloads/BaiduPcs` |
+
+> macOS 同样落到 `~/.config`：客户端只调用 .NET 的 `SpecialFolder.ApplicationData`，没有平台分支（**待 Mac 实机确认**，见 [docs/FACTS.md](docs/FACTS.md) §六）。`accounts.json` 以明文保存 BDUSS，请勿分享该文件。
 
 ## 架构设计
 
@@ -188,7 +190,7 @@ dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj
 
 1. **零 UI 依赖** —— 不引用 Avalonia、不依赖任何 UI NuGet 包；对话框、剪贴板、文件选择全部通过 APP 层的 `IDialogService` 抽象隔离。同一份核心代码可以接任意前端：Avalonia 桌面、MAUI 移动端、Web 管理界面（NAS / 软路由），扩展前端**无需改动任何协议与引擎代码**。
 2. **协议与引擎完整** —— 登录（`Auth/`）、API 客户端（`Api/`）、下载引擎（`Download/`）、上传引擎（`Upload/`）全部位于 Core。下载引擎只接收 `Urls + CookieHeader`，与百度协议解耦，可复用为通用下载器。
-3. **引擎可独立测试** —— 164 个用例不依赖任何 UI 框架：密码学算法对齐 Go 测试向量，协议层用 mock handler 验证参数，引擎层用本地测试服务器验证并发、断点、重试、暂停恢复。
+3. **引擎可独立测试** —— 用例不依赖任何 UI 框架：密码学算法对齐 Go 测试向量，协议层用 mock handler 验证参数，引擎层用本地测试服务器验证并发、断点、重试、暂停恢复（基线见 [docs/FACTS.md](docs/FACTS.md)）。
 
 ```
 BaiduPcsAPP —— Avalonia 桌面（可替换为 MAUI / Web 前端）
@@ -239,7 +241,7 @@ BaiduPcs.slnx
 │  ├─ Upload/                # 上传引擎（秒传 + 分片 + 进程内断点 + 重名递增）
 │  ├─ Transfer/              # ITransferEngine（下载/上传共用接口）
 │  └─ Infrastructure/        # HTTP 客户端 / 路径常量 / multipart 构造
-├─ BaiduPcs.Core.Tests/      # 单元 + 集成测试（164 个用例）
+├─ BaiduPcs.Core.Tests/      # 单元 + 集成测试（用例数见 docs/FACTS.md）
 └─ BaiduPcsAPP/              # Avalonia 桌面应用（可替换为任意前端）
    ├─ ViewModels/            # 登录 / 文件浏览 / 传输 / 设置
    ├─ Views/                 # XAML 视图
@@ -271,7 +273,7 @@ BaiduPcs-CS 是**非官方的第三方客户端**，与百度公司无关。它�
 
 **Q2：使用第三方客户端会不会被封号？**
 
-本工具调用的是百度网盘面向 Web / 客户端的私有接口，接口可能随时变更，账号也存在被风控（限速、验证、封禁）的可能性。项目已内置「统一 UA、限制新建连接速率、指数退避」等降低风险的措施，但**无法保证零风险**，建议优先使用小号体验。
+本工具调用的是百度网盘面向 Web / 客户端的私有接口，接口可能随时变更，账号也存在被风控（限速、验证、封禁）的可能性。项目已内置「统一 UA、限制新建连接速率、失败后退避重连」等降低风险的措施，但**无法保证零风险**，建议优先使用小号体验。
 
 **Q3：我的 BDUSS 会被上传到第三方服务器吗？**
 
@@ -283,7 +285,12 @@ BaiduPcs-CS 是**非官方的第三方客户端**，与百度公司无关。它�
 
 **Q5：为什么下载目录里会出现 `.part` / `.part.json` 文件？**
 
-下载中的文件写入 `文件名.part`，`.part.json` 记录每个分片的剩余范围，用于断点续传。下载完成后 `.part` 会重命名为正式文件、`.part.json` 自动删除。中途取消会保留这两个文件，方便下次续传；如果不想要续传，手动删掉即可。
+下载中的文件写入 `文件名.part`，`.part.json` 记录每个分片的剩余范围，用于断点续传。下载完成后 `.part` 会重命名为正式文件、`.part.json` 自动删除。
+
+- **暂停 / 异常退出 / 任务失败**：两个文件保留，下次下载同一文件自动续传；
+- **主动取消**：v0.6.0 会删除这两个文件（进度丢弃）；想保留进度请用「暂停」而不是「取消」。
+
+> 该行为已列入 v0.6.1 修复计划：取消改为保留断点，只有「删除任务」才清理文件。
 
 **Q6：下载报 403 或失败怎么办？**
 
@@ -319,7 +326,7 @@ BaiduPcs-CS 是**非官方的第三方客户端**，与百度公司无关。它�
 # 构建全部项目
 dotnet build BaiduPcs.slnx
 
-# 运行测试（164 个用例，约 16 秒）
+# 运行测试（用例数与耗时基线见 docs/FACTS.md）
 dotnet test BaiduPcs.Core.Tests/BaiduPcs.Core.Tests.csproj
 
 # 打包指定平台（6 个 RID：win-x64 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64）
@@ -335,8 +342,9 @@ dotnet publish BaiduPcsAPP/BaiduPcsAPP.csproj -c Release -r win-x64 \
 | 密码学 | `NetdiskSign` / `Md5Obfuscator` 对齐 Go 测试向量 |
 | 协议层 | mock HttpMessageHandler 验证 UA / Cookie / URL / 表单 / multipart 字段 |
 | 引擎层 | 本地测试服务器验证并发分片、断点续传、限流重试、403 换链、断流重连、暂停恢复、秒传 / 重名 / 会话失效 |
+| 桌面层 | ⚠️ 目前无自动化测试（`BaiduPcsAPP` 零覆盖），属已知维护债务 |
 
-更多设计细节见 [`docs/DEVELOPMENT_LOG.md`](docs/DEVELOPMENT_LOG.md)（架构决策与踩坑记录）和 [`docs/DOWNLOAD_ENGINE_DESIGN.md`](docs/DOWNLOAD_ENGINE_DESIGN.md)（下载引擎设计方案）。
+更多细节：架构决策与踩坑见 [`docs/DEVELOPMENT_LOG.md`](docs/DEVELOPMENT_LOG.md)，下载引擎方案见 [`docs/DOWNLOAD_ENGINE_DESIGN.md`](docs/DOWNLOAD_ENGINE_DESIGN.md)，**维护流程与文档同步规则**见 [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md)。
 
 ## 路线图
 
@@ -345,10 +353,27 @@ dotnet publish BaiduPcsAPP/BaiduPcsAPP.csproj -c Release -r win-x64 \
 | v0.5.0 | BDUSS 登录、文件浏览、单通道下载、多账号 | ✅ 已发布 |
 | v0.5.9 | 多线程分片下载、断点续传、错误分类与重试、任务暂停/取消 | ✅ 已发布 |
 | v0.6.0 | 上传引擎（秒传 / 分片 / 断点）、传输队列、Linux ARM64 包 | ✅ 当前版本 |
+| v0.6.1 | 稳定性修复：界面可用性、传输语义（取消保留断点 / 暂停让出配额 / 覆盖保护）、文档与 CI | 🚧 进行中 |
 | v0.7 | 搜索、回收站、复制/移动、多选批处理、目录递归上传 | 🚧 规划中 |
 | v0.9 | 设置页（代理 / UA / 并发 / 限速）、分享创建与列表、下载限速 | 🚧 规划中 |
 | v1.0 | 安装包（NSIS / Inno）、应用图标、系统托盘、自动更新、深浅色主题、中英双语 | 🚧 规划中 |
 | 后置 | 跨进程任务恢复、安卓（MAUI）、Web 管理界面 | 💡 长期 |
+
+## 已知问题
+
+以下是 v0.6.0 已确认、尚未修复的问题。完整清单、证据与修复计划见 [docs/CODE_REVIEW_2026-11-25.md](docs/CODE_REVIEW_2026-11-25.md)。
+
+| 问题 | 影响 | 临时规避 |
+|------|------|----------|
+| 新建文件夹 / 重命名 / 删除 的对话框按钮未接线 | 三个操作实际无法完成 | 暂无（v0.6.1 修复） |
+| 侧边栏「传输 / 设置」点击无效 | 这两页进不去，任务只能从底部停靠栏看 | 暂无 |
+| **取消**下载会丢弃已下载进度 | 误点取消需从头下载 | 改用「暂停」 |
+| 上传任务失败后只能重试一次 | 第二次点「继续」无反应 | 重新选择文件上传 |
+| 暂停会占用并发配额（同时 2 个） | 两个任务都暂停后队列不再前进 | 恢复其中一个 |
+| 大文件上传在慢速上行可能反复超时 | 64 MB 分片需持续 ≥1.31 MB/s | 换更好的网络或分段传 |
+| 下载可能静默覆盖本地同名文件 | 目标目录已有同名文件会被替换 | 换一个保存目录 |
+
+> 修复顺序见路线图 v0.6.1；安全相关的默认值（TLS 证书校验）处理方案见 [SECURITY.md](SECURITY.md)。
 
 ## 参与贡献
 
@@ -379,7 +404,7 @@ Key capabilities:
 - **Transfer queue** with pause / resume / cancel / retry and live progress and speed.
 - **Self-contained single-file builds** for Windows, Linux, macOS (x64 and arm64), including NAS and SBC devices.
 
-`BaiduPcs.Core` has **zero UI dependencies**, so the same engine can back a desktop app, a MAUI mobile client, or a web admin panel. The test suite contains **164 unit and integration tests** and requires no UI framework.
+`BaiduPcs.Core` has **zero UI dependencies**, so the same engine can back a desktop app, a MAUI mobile client, or a web admin panel. The test suite requires no UI framework; the baseline (case count, build status) lives in [docs/FACTS.md](docs/FACTS.md).
 
 Download the latest build from [Releases](https://github.com/usre13243296/BaiduPcs-CS/releases/latest). Licensed under [MIT](LICENSE). For learning and personal use only; use at your own risk.
 

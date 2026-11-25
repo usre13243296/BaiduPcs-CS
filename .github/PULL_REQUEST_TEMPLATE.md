@@ -22,6 +22,8 @@
 - [ ] 新增或修改的协议 / 引擎行为已补充测试（不访问真实百度接口）
 - [ ] `BaiduPcs.Core` 未引入 Avalonia 或任何 UI 依赖
 - [ ] 涉及用户可见行为时，已同步更新 `README.md` 与 `CHANGELOG.md`
+- [ ] 版本 / 测试数 / 并发 / 分片 / 数据目录等事实**只改了 `docs/FACTS.md`**，未在多份文档里复述
+- [ ] `tools/check-docs.ps1` 通过（文档链接、版本号、用例数一致）
 - [ ] 提交内容不含 BDUSS / Cookie / `accounts.json` / 未脱敏日志与截图
 - [ ] 提交内容不含 `bin/`、`obj/`、`publish/` 等构建产物
 
